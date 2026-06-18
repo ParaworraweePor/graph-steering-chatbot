@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+gradio
+pydantic
+neo4j
+requests
+pytest
+openai
+python-dotenv
