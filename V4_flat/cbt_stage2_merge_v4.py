@@ -82,6 +82,11 @@ _JUDGE_PROMPT = """For each pair of CBT entities of the same class from one sess
 the SAME underlying item (duplicate mentions) or DIFFERENT items. Texts are in Thai.
 Same wording is not required; same meaning is what matters.
 
+Two beliefs with DIFFERENT self-categories — worthless vs unlovable vs helpless — are
+DIFFERENT items: answer same=false even if they are related or co-occur. Two phrasings
+of the SAME belief (e.g. "no one will love me" and "I am unlovable") are the SAME:
+answer same=true.
+
 {pairs}
 
 Return one object per pair: [{{"pair":1,"same":true|false}}, ...]."""

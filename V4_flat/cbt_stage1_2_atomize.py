@@ -58,6 +58,13 @@ _AT_SPECIFIC = (
     "(a feeling is a separate Reaction)."
 )
 
+_SELF_BELIEF_CLAUSE = (
+    "If the text states a belief about the SELF but phrases it through other people's "
+    "eyes ('people will say I am ...', 'everyone can see I am ...', 'they think I am "
+    "...'), rewrite it as a direct first-person statement ('I am ...'). Change ONLY the "
+    "framing — keep the meaning identical."
+)
+
 _JSON_REMINDER_LIST = (
     "\n\nOutput ONLY a JSON array of strings. Start with [ and end with ]. "
     f"1 to {MAX_SPLITS} items. Most inputs are a single idea — a 1-item array is correct."
@@ -99,6 +106,7 @@ Rewrite the text into one or more ATOMIC, self-contained, first-person propositi
 - SPLIT only when the text contains genuinely DISTINCT {unit}s (e.g. two separate
   beliefs). Do NOT split one idea into clauses.
 - CONDENSE rambling into a short, clear statement.
+- {self_belief_clause}
 - Stay FAITHFUL: add no meaning, infer nothing, do not generalize. {at_specific}
 - Most inputs are a single idea — ONE cleaned proposition is the common, correct answer.
 
@@ -116,6 +124,7 @@ def atomize_node(n: Node, turns: list[Turn], llm: ChatOllama, id_fn) -> list[Nod
         class_label=class_label,
         class_definition=class_definition,
         unit=_UNIT[class_label],
+        self_belief_clause=_SELF_BELIEF_CLAUSE if class_label in ("CoreBelief", "AutomaticThought") else "",
         at_specific=_AT_SPECIFIC if class_label == "AutomaticThought" else "",
         node_text=n.text,
         evidence_turns=_evidence(n, turns),

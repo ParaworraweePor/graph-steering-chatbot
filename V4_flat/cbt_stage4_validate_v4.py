@@ -46,6 +46,12 @@ for _subj, _fams in ANCHOR_FAMILIES.items():
         _HINT.setdefault(_p, _h)
 _HINT["reinforces"] = "this reaction maintains/strengthens that core belief (feedback loop)"
 
+# predicate -> list of "SubjectClass → ObjectClass" strings (for the ALLOWED hint
+# rendered per candidate in 4b). Built from ALLOWED_SIGNATURES.
+_ALLOWED_BY_PRED: dict[str, list[str]] = {}
+for (_p, _s, _o) in ALLOWED_SIGNATURES:
+    _ALLOWED_BY_PRED.setdefault(_p, []).append(f"{_s} → {_o}")
+
 
 @dataclass
 class ValidationReport:
@@ -183,6 +189,17 @@ the subject's evidence turns directly precede the object's), and the topic is
 consistent, KEEP — Beck's basic cognitive model expects these edges. Only drop
 when the evidence actively contradicts the pairing.
 
+RELATION TYPES ARE NOT MUTUALLY EXCLUSIVE. The same node can carry several different
+edges. An AutomaticThought can be BOTH triggered by a Situation (triggers) AND rooted in
+a CoreBelief (stemsFrom). Do NOT drop an edge because another edge of a DIFFERENT type
+exists, or because a different relation "seems more appropriate". Judge each candidate
+ONLY against its own evidence.
+
+CHECK THE CONSTRAINT FIRST. Each candidate shows its ALLOWED endpoints
+(relation goes SubjectClass → ObjectClass). If the subject and object match the allowed
+classes and the evidence supports the link, KEEP. Drop ONLY when the evidence actively
+contradicts the link — not because the link is indirect or could be expressed another way.
+
 {candidates}
 
 Return one object per candidate:
@@ -198,10 +215,15 @@ def _render_candidate(i: int, e: Edge, by_id: dict[int, Node],
         t = turns_by_idx.get(ti)
         if t:
             ev.append(f"  turn {ti} | {'T' if t.speaker=='therapist' else 'C'}: {t.text}")
+    allowed = _ALLOWED_BY_PRED.get(e.predicate, [])
+    allowed_line = (f"ALLOWED: {e.predicate} goes "
+                    + " / ".join(allowed) + "."
+                    if allowed else "")
     return (f"CANDIDATE {i}: ({leaf_label(s.label,s.group_key)}) '{s.text}' "
             f"--{e.predicate}--> ({leaf_label(o.label,o.group_key)}) '{o.text}'\n"
             f"DEFINITION: {e.predicate} = {_HINT.get(e.predicate,'(relation)')}\n"
-            f"EVIDENCE:\n" + ("\n".join(ev) or "  (none)"))
+            + (allowed_line + "\n" if allowed_line else "")
+            + f"EVIDENCE:\n" + ("\n".join(ev) or "  (none)"))
 
 
 def verify_4b(edges: list[Edge], survivors: dict[str, list[Node]], turns: list[Turn],

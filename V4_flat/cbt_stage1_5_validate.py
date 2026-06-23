@@ -50,36 +50,59 @@ def _parse(raw: str) -> list:
 # (a) node validation — keep/drop
 # ---------------------------------------------------------------------------
 
-_VALIDATE_PROMPT = """You verify whether extracted CBT entities truly belong to
-their assigned class. Entity texts/evidence are in Thai.
+_VALIDATE_PROMPT = """You verify whether extracted CBT entities belong to their assigned
+class, and fix the label when they don't. Entity texts/evidence are in Thai.
 
-For each candidate, the class DEFINITION is given. Judge whether the candidate text
-genuinely fits THAT class (not a neighbouring class). When the text really belongs
-to a different class, or is not a real instance, answer "drop". When in doubt about
-a borderline-but-plausible case, answer "keep".
+For each candidate, the class DEFINITION is given. Decide one verdict:
+- "keep"       — the text genuinely fits its assigned class.
+- "drop"       — the text is not a real instance of any class (noise, a fragment, a
+                 therapist question, a repeated filler line).
+- "reclassify" — the text is real but belongs to a DIFFERENT class. Give the correct
+                 newLabel.
+
+Use "reclassify" mainly inside the belief/thought family. The boundary:
+- CoreBelief: an ABSOLUTE identity claim — "I am worthless", "people can't be trusted".
+  No "if", no "must".
+- IntermediateBelief: a rule ("I must/should..."), an assumption ("if...then..."), or
+  an attitude ("it's terrible to..."). Conditional or instrumental.
+- AutomaticThought: a spontaneous thought tied to ONE moment. Not a rule, not an
+  absolute identity claim.
+A statement containing "I must / I should / I have to / if ... then" that was labeled
+CoreBelief or AutomaticThought is almost always an IntermediateBelief — reclassify it.
+A bare identity claim ("I am unlovable") labeled IntermediateBelief or AutomaticThought
+is a CoreBelief — reclassify it.
+
+When genuinely unsure on a borderline-but-plausible case, "keep".
 
 CLASS-SPECIFIC GUIDANCE (apply only to the relevant class):
 - Situation: a trigger context. Acceptable forms include a single concrete moment
   ("the breakup yesterday"), a state of being ("being alone"), a recurring trigger
   pattern ("looking around at friends in relationships"), or a recalled past event.
-  Be lenient: if it names something the client experiences that could plausibly
-  trigger a thought, KEEP. Only drop when it is clearly NOT a trigger context.
-- Problem: a session-agenda heading — an ongoing area of difficulty. A Problem
-  may name an underlying fear or belief ("fear of being alone leading to people-
-  pleasing") without that disqualifying it as a Problem. Drop only when the text
-  is purely a momentary thought or a single Reaction, not a recurring theme.
+  Be lenient: if it names something the client experiences that could plausibly trigger
+  a thought, KEEP. Only drop when it is clearly NOT a trigger context.
+- Problem: a session-agenda heading — an ongoing area of difficulty. A Problem may name
+  an underlying fear or belief ("fear of being alone leading to people-pleasing")
+  without that disqualifying it. Drop only when the text is purely a momentary thought
+  or a single Reaction, not a recurring theme.
 
 {candidates}
 
 Return one object per candidate:
-[{{"item": 1, "verdict": "keep", "reason": "<short>"}}, ...]
-verdict is exactly "keep" or "drop".{reminder}"""
+[{{"item": 1, "verdict": "keep", "newLabel": "", "reason": "<short>"}}, ...]
+verdict is exactly "keep", "drop", or "reclassify". Set newLabel only when
+reclassifying (one of CoreBelief, IntermediateBelief, AutomaticThought); otherwise "".{reminder}"""
+
+
+_RECLASSIFY_TARGETS = frozenset({"CoreBelief", "IntermediateBelief", "AutomaticThought"})
 
 
 def validate_nodes(by_label: dict[str, list[Node]], turns: list[Turn],
                    llm: ChatOllama | None = None) -> tuple[dict[str, list[Node]], list[dict]]:
     llm = llm or _llm()
     kept: dict[str, list[Node]] = {lbl: [] for lbl in by_label}
+    # Ensure reclassify targets always have a bucket, even if absent from input.
+    for tgt in _RECLASSIFY_TARGETS:
+        kept.setdefault(tgt, [])
     dropped: list[dict] = []
 
     for label, nodes in by_label.items():
@@ -97,20 +120,31 @@ def validate_nodes(by_label: dict[str, list[Node]], turns: list[Turn],
             ]
             prompt = _VALIDATE_PROMPT.format(candidates="\n\n".join(blocks),
                                              reminder=_JSON_REMINDER)
-            verdicts = {i: (True, "parse-fail kept") for i in range(1, len(batch) + 1)}
+            # default: parse-fail -> keep as-is
+            verdicts: dict[int, tuple[str, str, str]] = {
+                i: ("keep", "", "parse-fail kept") for i in range(1, len(batch) + 1)
+            }
             for it in _parse(llm.invoke("/no_think\n" + prompt).content):
                 if isinstance(it, dict) and isinstance(it.get("item"), int):
                     idx = it["item"]
                     if 1 <= idx <= len(batch):
-                        verdicts[idx] = (str(it.get("verdict", "")).strip().lower() == "keep",
-                                         str(it.get("reason", "")).strip())
+                        v = str(it.get("verdict", "")).strip().lower()
+                        new_label = str(it.get("newLabel", "")).strip()
+                        reason = str(it.get("reason", "")).strip()
+                        verdicts[idx] = (v, new_label, reason)
             for i, n in enumerate(batch, 1):
-                keep, reason = verdicts[i]
-                if keep:
-                    kept[label].append(n)
-                else:
+                verdict, new_label, reason = verdicts[i]
+                if verdict == "drop":
                     dropped.append({"id": n.id, "label": label, "text": n.text,
                                     "reason": reason or "(no reason)"})
+                elif verdict == "reclassify" and new_label in _RECLASSIFY_TARGETS and new_label != label:
+                    print(f"[stage1.5] reclassify id={n.id} {label} -> {new_label}: "
+                          f"{n.text[:60]}", file=sys.stderr)
+                    n.label = new_label
+                    kept.setdefault(new_label, []).append(n)
+                else:
+                    # keep, or unknown/missing newLabel on reclassify -> fail safe
+                    kept[label].append(n)
 
     n_drop = len(dropped)
     print(f"[stage1.5] validation: dropped {n_drop} node(s)", file=sys.stderr)

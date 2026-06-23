@@ -22,8 +22,6 @@ LLM: llama3.1:8b, temperature 0.
 
 from __future__ import annotations
 
-import json
-import re
 import sys
 
 from langchain_ollama import ChatOllama
@@ -31,11 +29,19 @@ from tqdm import tqdm
 
 from cbt_ontology_v4_flat import (Turn, Node, Edge, ANCHOR_FAMILIES, REINFORCES,
                                   leaf_label, turn_texts, render_turns)
+from cbt_util import invoke_json
 
 OLLAMA_TIMEOUT = 900  # 15-minute timeout per LLM call
 MAX_EVIDENCE = 5
 _JSON_REMINDER = ("\n\nOutput ONLY a JSON array starting with [ and ending with ]. "
                   "Empty array [] is a correct answer when no relationship holds.")
+
+_ANCHOR_SCHEMA = ('[{"relation":"<name>","object":<int>,'
+                  '"evidence_turns":[<int>],"reason":"<short>"}]')
+_ANCHOR_SCHEMA_INTENSITY = ('[{"relation":"<name>","object":<int>,'
+                            '"evidence_turns":[<int>],"reason":"<short>",'
+                            '"reportedIntensity":"<text or omit>"}]')
+_REINFORCES_SCHEMA = '[{"reaction":<int>,"belief":<int>,"reason":"<short>"}]'
 
 
 def _llm() -> ChatOllama:
@@ -131,11 +137,9 @@ def _extract_subject(subj: Node, candidates: dict[str, list[Node]],
         subj_turns=sorted(subj.evidence), context=ctx,
         families="\n\n".join(blocks), intensity=intensity, reminder=_JSON_REMINDER)
 
-    raw = llm.invoke("/no_think\n" + prompt).content
-    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    try:
-        arr = json.loads(raw[raw.index("["): raw.rindex("]") + 1])
-    except (ValueError, json.JSONDecodeError):
+    schema = _ANCHOR_SCHEMA_INTENSITY if "leadsTo" in rel_objs else _ANCHOR_SCHEMA
+    arr = invoke_json(llm, prompt, schema, retries=1)
+    if arr is None:
         print(f"[stage3] subject {subj.id} ({subj.label}): parse fail", file=sys.stderr)
         if audit is not None:
             audit.append({
@@ -215,11 +219,8 @@ def _extract_reinforces(reactions: list[Node], beliefs: list[Node],
         reactions="\n".join(_node_line(i, n) for i, n in enumerate(reactions, 1)),
         beliefs="\n".join(_node_line(i, n) for i, n in enumerate(beliefs, 1)),
         reminder=_JSON_REMINDER)
-    raw = llm.invoke("/no_think\n" + prompt).content
-    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    try:
-        arr = json.loads(raw[raw.index("["): raw.rindex("]") + 1])
-    except (ValueError, json.JSONDecodeError):
+    arr = invoke_json(llm, prompt, _REINFORCES_SCHEMA, retries=1)
+    if arr is None:
         return []
     edges: list[Edge] = []
     for it in arr:

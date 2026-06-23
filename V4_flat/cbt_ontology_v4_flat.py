@@ -116,19 +116,30 @@ CLASS_DEFINITIONS: dict[str, str] = {
                      "style — do NOT extract it as a technique."),
     "Homework": ("A between-session task the therapist assigns the client to do "
                  "before the next session."),
-    "CoreBelief": ("A deep, global, ABSOLUTE belief about the self, the world, or "
-                   "other people (\"I'm worthless\", \"people can't be trusted\"). "
-                   "Not tied to one moment — that is an AutomaticThought."),
-    "IntermediateBelief": ("A rule, attitude, or conditional assumption sitting "
-                           "between core beliefs and automatic thoughts. Conditional "
-                           "or domain-specific (\"If I ask for help, I'm incompetent\")."),
+    "CoreBelief": (
+        "An ABSOLUTE, global belief about the self, the world, or other people, stated "
+        "with no condition — e.g. 'I am worthless', 'I am unlovable', 'people cannot be "
+        "trusted'. It is NOT a rule and NOT a condition. If the text contains "
+        "'I must / I should / I have to' or 'if ... then ...', it is an IntermediateBelief, "
+        "not a CoreBelief. If it is tied to one specific moment, it is an AutomaticThought."
+    ),
+    "IntermediateBelief": (
+        "A conditional or instrumental belief sitting between core beliefs and automatic "
+        "thoughts: a RULE ('I must always do my best'), an ASSUMPTION ('if I ask for help, "
+        "people think I'm incompetent'), or an ATTITUDE ('it's terrible to fail'). It is "
+        "marked by 'must / should / have to' or 'if ... then ...'. It is NOT an absolute "
+        "identity claim like 'I am worthless' (that is a CoreBelief)."
+    ),
     "Situation": ("A SINGLE, concrete, time-bound moment that triggered a specific "
                   "automatic thought. The first link of a Situation→AutomaticThought→"
                   "Reaction chain. Test: can you attach ONE specific automatic "
                   "thought to this exact moment? → Situation."),
-    "AutomaticThought": ("A spontaneous, situation-specific thought or mental image. "
-                         "Keep emotions OUT of the content (\"I'll fail\", not "
-                         "\"I'll fail and feel scared\"). Not a therapist question."),
+    "AutomaticThought": (
+        "A spontaneous, situation-specific thought tied to ONE moment — e.g. 'he didn't "
+        "text back, he's angry at me'. It is NOT a general rule ('I must ...' = "
+        "IntermediateBelief) and NOT an absolute identity claim ('I am worthless' = "
+        "CoreBelief). Keep emotions OUT of the content (a feeling is a Reaction)."
+    ),
     "Reaction": ("The client's response to an automatic thought — a feeling, an "
                  "action/avoidance, or a body sensation."),
     "AdaptiveResponse": ("A BALANCED, realistic response developed to counter an "

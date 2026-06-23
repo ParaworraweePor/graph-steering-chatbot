@@ -45,8 +45,11 @@ from langchain_ollama import ChatOllama
 from tqdm import tqdm
 
 from cbt_ontology_v4_flat import Turn, Node, CLASS_DEFINITIONS
+from cbt_util import invoke_json
 
 OLLAMA_TIMEOUT = 900
+
+_VALID_CHANNELS = frozenset({"emotional", "behavioral", "physiological"})
 
 # Classes that benefit from session-level extraction.
 SESSION_LEVEL_CLASSES = (
@@ -64,6 +67,7 @@ ADJACENT_PRIORS: dict[str, tuple[str, ...]] = {
     "Intervention":       ("AutomaticThought", "IntermediateBelief", "CoreBelief"),
     "Homework":           ("Problem", "AutomaticThought", "IntermediateBelief"),
     "AdaptiveResponse":   ("AutomaticThought", "Intervention"),
+    "Reaction":           ("AutomaticThought", "Situation"),
 }
 
 # Chunking constants (char-budget proxy for token budget).
@@ -234,6 +238,113 @@ def _extract_class_for_chunk(
     return out
 
 
+_REACTION_SESSION_PROMPT = """You read a whole therapy session and extract the CLIENT's
+REACTIONS — how the client FELT (emotional), what the client DID or avoided (behavioral),
+or body sensations (physiological), in response to their situations or thoughts. Texts
+are in Thai.
+
+RULES:
+- Attribute a reaction to the CLIENT even when the THERAPIST names it. If the therapist
+  says "that is devastating" or "that sounds really lonely", extract the client's
+  reaction ("devastated", "lonely").
+- A reaction is a feeling, an action/avoidance, or a body sensation. It is NOT a thought
+  ("I'll never find love" is an AutomaticThought) and NOT a belief or rule.
+- Use the surrounding context to decide. Do not invent reactions with no support.
+- Keep each reaction short, in the client's own terms.
+
+CONTEXT — automatic thoughts and situations already found (for grounding only):
+{priors}
+
+TRANSCRIPT:
+{transcript}
+
+Output a JSON array, one object per reaction:
+[{{"text": "<short reaction>", "channel": "emotional|behavioral|physiological",
+   "evidence_turns": [<turn indices>]}}]
+Empty array [] if the client shows no clear reaction.{reminder}"""
+
+_REACTION_SCHEMA = ('[{"text":"<short reaction>",'
+                    '"channel":"emotional|behavioral|physiological",'
+                    '"evidence_turns":[<int>]}]')
+
+
+def _recover_reactions_for_chunk(
+    chunk_turns: list[Turn],
+    valid_turn_indices: set[int],
+    by_label: dict[str, list[Node]],
+    llm: ChatOllama,
+    id_fn,
+) -> list[Node]:
+    """One LLM call: recover client Reactions on one chunk, with AT + Situation
+    priors. Returns new Nodes with `props["channel_hint"]` (Stage 2.5 finalizes
+    `channel`)."""
+    transcript = _render_turns(chunk_turns)
+    priors = _format_priors(by_label, ADJACENT_PRIORS.get("Reaction", ()))
+    prompt = _REACTION_SESSION_PROMPT.format(
+        priors=priors,
+        transcript=transcript,
+        reminder=_JSON_REMINDER,
+    )
+    arr = invoke_json(llm, prompt, _REACTION_SCHEMA, retries=1)
+    if arr is None:
+        print("[stage1.1] parse fail on Reaction recovery chunk — skipping",
+              file=sys.stderr)
+        return []
+
+    out: list[Node] = []
+    for it in arr:
+        if not isinstance(it, dict):
+            continue
+        text = str(it.get("text", "")).strip()
+        if not text:
+            continue
+        channel = str(it.get("channel", "")).strip().lower()
+        raw_ev = it.get("evidence_turns") or []
+        evidence: set[int] = set()
+        for x in raw_ev:
+            try:
+                ti = int(x)
+            except (TypeError, ValueError):
+                continue
+            if ti in valid_turn_indices:
+                evidence.add(ti)
+        if not evidence:
+            print(f"[stage1.1] dropped Reaction '{text[:40]}' — no valid evidence",
+                  file=sys.stderr)
+            continue
+        props: dict = {}
+        if channel in _VALID_CHANNELS:
+            props["channel_hint"] = channel
+        out.append(Node(
+            id=id_fn(),
+            label="Reaction",
+            text=text,
+            group_key=None,
+            evidence=evidence,
+            context={},
+            props=props,
+        ))
+    return out
+
+
+def recover_reactions(by_label: dict[str, list[Node]], turns: list[Turn],
+                      valid_turn_indices: set[int], llm: ChatOllama,
+                      id_fn) -> list[Node]:
+    """Run the Reaction recovery pass across chunks; return the new Nodes
+    (de-duplicated by (text, evidence) within this pass)."""
+    chunks = _chunks(turns)
+    added: list[Node] = []
+    for ci, chunk in enumerate(chunks):
+        new_nodes = _recover_reactions_for_chunk(
+            chunk, valid_turn_indices, by_label, llm, id_fn,
+        )
+        if new_nodes and len(chunks) > 1:
+            print(f"[stage1.1]   Reaction chunk {ci+1}/{len(chunks)}: "
+                  f"+{len(new_nodes)} nodes", file=sys.stderr)
+        added.extend(new_nodes)
+    return _dedup_within_class(added)
+
+
 def _dedup_within_class(nodes: list[Node]) -> list[Node]:
     """Drop exact (text, evidence) duplicates from the same chunk-set. Stage 2
     will handle semantic dedup; this only collapses chunk-overlap repeats."""
@@ -289,4 +400,12 @@ def run_stage1_1(by_label: dict[str, list[Node]], turns: list[Turn],
     added_total = sum(len(out[c]) - len(by_label.get(c, [])) for c in SESSION_LEVEL_CLASSES)
     print(f"[stage1.1] session-level pass added {added_total} nodes "
           f"(across {len(SESSION_LEVEL_CLASSES)} target classes)", file=sys.stderr)
+
+    # Reaction recovery pass (Reaction is NOT in SESSION_LEVEL_CLASSES — needs its
+    # own session-level call because per-turn extraction misses most reactions).
+    reactions = recover_reactions(out, turns, valid_turn_indices, llm, _next_id)
+    out.setdefault("Reaction", [])
+    out["Reaction"] = out["Reaction"] + reactions
+    print(f"[stage1.1] Reaction recovery added {len(reactions)} node(s)", file=sys.stderr)
+
     return out
