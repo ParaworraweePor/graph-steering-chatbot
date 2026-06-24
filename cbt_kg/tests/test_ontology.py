@@ -1,12 +1,14 @@
-"""Verifies the ported V4_flat ontology matches the spec in §3 of PRD_cbt_v7."""
+"""Verifies the ported V4_flat ontology matches the spec in §3 of PRD_cbt_v7.1."""
 
 from __future__ import annotations
 
 from cbt_kg.ontology import (ANCHOR_FAMILIES, CBTSchema, CLASS_DEFINITIONS,
                               CONTENT_LABELS, CORE_BELIEF_DOMAINS, DISTORTION_TYPES,
-                              EDGE_MAP, EXTRACT_CLASSES, IB_SUBTYPES, NODE_CLASSES,
-                              PREDICATE_FROM_REL, PROBLEM_DOMAINS, REACTION_CHANNELS,
-                              REL_TYPE, SUBJECT_EDGES, TECHNIQUES, TEXT_PROP)
+                              EDGE_MAP, EXTRACT_CLASSES, HOMEWORK_TASKTYPES,
+                              IB_SUBTYPES, NODE_CLASSES, PREDICATE_FROM_REL,
+                              PROBLEM_DOMAINS, REACTION_CHANNELS, REL_TYPE,
+                              SELF_CB_CATEGORIES, SITUATION_KINDS, SUBJECT_EDGES,
+                              TECHNIQUES, TEXT_PROP, apply_gating_constraints)
 
 
 def test_thirteen_node_classes():
@@ -85,6 +87,60 @@ def test_rel_type_round_trips():
 def test_text_prop_covers_every_content_label():
     for label in CONTENT_LABELS:
         assert label in TEXT_PROP
+
+
+def test_secondary_enum_glosses():
+    assert set(SELF_CB_CATEGORIES) == {"helpless", "unlovable", "worthless"}
+    assert len(HOMEWORK_TASKTYPES) == 7
+    assert len(SITUATION_KINDS) == 6
+
+
+def test_gating_constraints_core_belief():
+    # category stripped when domain != self
+    p = apply_gating_constraints("CoreBelief", {"domain": "world", "category": "helpless"})
+    assert "category" not in p
+    p = apply_gating_constraints("CoreBelief", {"domain": "others", "category": "worthless"})
+    assert "category" not in p
+    # category kept when domain == self
+    p = apply_gating_constraints("CoreBelief", {"domain": "self", "category": "unlovable"})
+    assert p["category"] == "unlovable"
+
+
+def test_gating_constraints_reaction():
+    # valence stripped unless channel == emotional
+    p = apply_gating_constraints("Reaction", {"channel": "behavioral", "valence": "negative"})
+    assert "valence" not in p
+    p = apply_gating_constraints("Reaction", {"channel": "physiological", "valence": "positive"})
+    assert "valence" not in p
+    # valence kept when channel == emotional
+    p = apply_gating_constraints("Reaction", {"channel": "emotional", "valence": "negative"})
+    assert p["valence"] == "negative"
+
+
+def test_gating_constraints_intervention():
+    # techniqueLabel stripped unless technique == other
+    p = apply_gating_constraints("Intervention",
+                                  {"technique": "realityTesting", "techniqueLabel": "x"})
+    assert "techniqueLabel" not in p
+    # techniqueLabel kept when technique == other
+    p = apply_gating_constraints("Intervention",
+                                  {"technique": "other", "techniqueLabel": "my custom"})
+    assert p["techniqueLabel"] == "my custom"
+
+
+def test_gating_constraints_defaults():
+    # AutomaticThought.modality defaults to verbal
+    p = apply_gating_constraints("AutomaticThought", {"content": "I'll fail"})
+    assert p["modality"] == "verbal"
+    # explicit modality preserved
+    p = apply_gating_constraints("AutomaticThought", {"content": "x", "modality": "image"})
+    assert p["modality"] == "image"
+    # Homework.isOptional defaults to False
+    p = apply_gating_constraints("Homework", {"taskDescription": "write a diary"})
+    assert p["isOptional"] is False
+    # explicit isOptional preserved
+    p = apply_gating_constraints("Homework", {"taskDescription": "y", "isOptional": True})
+    assert p["isOptional"] is True
 
 
 def test_schema_protocol_methods():

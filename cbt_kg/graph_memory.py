@@ -14,7 +14,7 @@ from typing import Iterable
 
 from .interfaces import GraphEdge, GraphNode, Schema
 from .ontology import (CONTENT_LABELS, ID_PREFIX, NODE_CLASSES, REACTION_CHANNELS,
-                       TEXT_PROP)
+                       TEXT_PROP, apply_gating_constraints)
 
 
 def _text_of(label: str, props: dict) -> str:
@@ -96,7 +96,7 @@ class InMemoryGraphStore:
             for node in self._nodes.values():
                 if node.label == label and node.status == "missing":
                     node.status = "found"
-                    node.props = dict(props)
+                    node.props = apply_gating_constraints(label, dict(props))
                     node.turn_acquired = turn_index
                     if turn_index not in node.evidence:
                         node.evidence.append(turn_index)
@@ -117,6 +117,7 @@ class InMemoryGraphStore:
             if v is None or v == "":
                 continue
             node.props[k] = v
+        apply_gating_constraints(node.label, node.props)
         if turn_index not in node.evidence:
             node.evidence.append(turn_index)
         node.turn_acquired = turn_index
@@ -237,8 +238,9 @@ class InMemoryGraphStore:
                                turn_index: int) -> GraphNode:
         nid = self._new_node_id(label)
         node = GraphNode(
-            node_id=nid, label=label, props=dict(props), status="found",
-            evidence=[turn_index], turn_acquired=turn_index,
+            node_id=nid, label=label,
+            props=apply_gating_constraints(label, dict(props)),
+            status="found", evidence=[turn_index], turn_acquired=turn_index,
         )
         self._nodes[nid] = node
         return node

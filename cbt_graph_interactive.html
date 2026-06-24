@@ -1,0 +1,476 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); font-size: 14px; }
+
+.shell { display: flex; flex-direction: column; height: 620px; background: var(--color-background-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; border: 0.5px solid var(--color-border-tertiary); }
+
+.tab-bar { display: flex; gap: 0; border-bottom: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); padding: 0 16px; flex-shrink: 0; }
+.tab { padding: 10px 14px; font-size: 12px; color: var(--color-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; }
+.tab.active { color: #D85A30; border-bottom-color: #D85A30; font-weight: 500; }
+
+.workspace { display: flex; flex: 1; overflow: hidden; }
+
+.graph-panel { flex: 1; display: flex; flex-direction: column; background: var(--color-background-primary); position: relative; }
+.graph-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 0.5px solid var(--color-border-tertiary); flex-shrink: 0; }
+.graph-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
+.graph-actions { display: flex; gap: 6px; align-items: center; }
+.btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid var(--color-border-secondary); background: transparent; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center; gap: 4px; }
+.btn-sm:hover { background: var(--color-background-secondary); }
+.btn-sm.primary { background: #D85A30; color: #fff; border-color: #D85A30; }
+.btn-sm.primary:hover { background: #993C1D; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+canvas { position: absolute; top: 0; left: 0; cursor: pointer; }
+
+.legend { padding: 7px 14px; border-top: 0.5px solid var(--color-border-tertiary); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex-shrink: 0; background: var(--color-background-primary); }
+.leg { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--color-text-secondary); }
+.ld { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+.detail-panel { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); overflow-y: auto; }
+.dp-header { padding: 10px 14px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.dp-title { font-size: 12px; font-weight: 500; color: var(--color-text-primary); }
+.dp-close { font-size: 16px; color: var(--color-text-tertiary); cursor: pointer; line-height: 1; border: none; background: none; padding: 0; }
+.dp-close:hover { color: var(--color-text-primary); }
+.dp-empty { padding: 24px 14px; text-align: center; color: var(--color-text-tertiary); font-size: 12px; line-height: 1.6; }
+.dp-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.dp-label-badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; margin-bottom: 4px; }
+.dp-field { display: flex; flex-direction: column; gap: 3px; }
+.dp-field label { font-size: 10px; color: var(--color-text-tertiary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+.dp-field input, .dp-field select, .dp-field textarea { font-size: 12px; padding: 5px 8px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); color: var(--color-text-primary); width: 100%; font-family: var(--font-sans); resize: none; }
+.dp-field textarea { min-height: 52px; }
+.dp-field input:focus, .dp-field select:focus, .dp-field textarea:focus { outline: none; border-color: #D85A30; }
+.dp-actions { padding: 10px 14px; border-top: 0.5px solid var(--color-border-tertiary); display: flex; gap: 6px; flex-shrink: 0; }
+.dp-actions button { flex: 1; font-size: 11px; padding: 6px; border-radius: 6px; border: 0.5px solid var(--color-border-secondary); background: transparent; cursor: pointer; color: var(--color-text-secondary); }
+.dp-actions button.save { background: #D85A30; color: #fff; border-color: #D85A30; }
+.dp-actions button.del { color: #E24B4A; border-color: #E24B4A; }
+.dp-actions button:hover { filter: brightness(0.92); }
+
+.create-modal { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal-box { background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-secondary); padding: 16px; width: 220px; display: flex; flex-direction: column; gap: 10px; }
+.modal-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.modal-field { display: flex; flex-direction: column; gap: 4px; }
+.modal-field label { font-size: 10px; color: var(--color-text-tertiary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+.modal-field select, .modal-field input, .modal-field textarea { font-size: 12px; padding: 5px 8px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); color: var(--color-text-primary); width: 100%; font-family: var(--font-sans); }
+.modal-field textarea { min-height: 48px; resize: none; }
+.modal-actions { display: flex; gap: 6px; }
+.modal-actions button { flex: 1; font-size: 11px; padding: 6px; border-radius: 6px; border: 0.5px solid var(--color-border-secondary); background: transparent; cursor: pointer; color: var(--color-text-secondary); }
+.modal-actions button.confirm { background: #D85A30; color: #fff; border-color: #D85A30; }
+</style>
+
+<div class="shell">
+  <div class="tab-bar">
+    <div class="tab">Therapy — Part 1</div>
+    <div class="tab active">Query — Part 2 <span style="font-size:10px;color:#1D9E75;margin-left:4px;">● edit mode</span></div>
+  </div>
+  <div class="workspace">
+    <div class="graph-panel" id="gp">
+      <div class="graph-header">
+        <span class="graph-title"><span class="live-dot" style="display:inline-block;margin-right:5px;vertical-align:middle;"></span>Knowledge graph · 9 nodes · 7 edges</span>
+        <div class="graph-actions">
+          <button class="btn-sm" id="btnNode">＋ Node</button>
+          <button class="btn-sm" id="btnEdge">＋ Edge</button>
+          <button class="btn-sm primary" id="btnSave">Save</button>
+        </div>
+      </div>
+      <canvas id="gc"></canvas>
+      <div class="legend">
+        <div class="leg"><div class="ld" style="background:#1D9E75;"></div>Session</div>
+        <div class="leg"><div class="ld" style="background:#378ADD; border-radius:2px;"></div>Problem / Goal</div>
+        <div class="leg"><div class="ld" style="background:#7F77DD;"></div>Cognitive</div>
+        <div class="leg"><div class="ld" style="background:#dee2e6; border:1px dashed #aaa;"></div>Missing</div>
+        <div class="leg"><div style="width:16px;height:1.5px;background:#1D9E75;"></div>Found edge</div>
+        <div class="leg"><div style="width:16px;height:1.5px;background:repeating-linear-gradient(90deg,#bbb 0,#bbb 3px,transparent 3px,transparent 6px);"></div>Placeholder</div>
+      </div>
+    </div>
+    <div class="detail-panel" id="dp">
+      <div class="dp-header">
+        <span class="dp-title">Inspector</span>
+      </div>
+      <div class="dp-empty" id="dpEmpty">Click any node or edge<br>to inspect or edit</div>
+      <div id="dpContent" style="display:none;flex:1;display:none;flex-direction:column;">
+        <div class="dp-body" id="dpBody"></div>
+        <div class="dp-actions" id="dpActions"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="create-modal" id="createModal" style="display:none;">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<script>
+const NODE_CLASSES = ["Problem","Goal","Intervention","Homework","CoreBelief","IntermediateBelief","Situation","AutomaticThought","Reaction","AdaptiveResponse","Client","Session"];
+const PREDICATES = ["triggers","leadsTo","stemsFrom","givesRiseTo","influencesPerceptionOf","manifestsAs","becomesSituation","reinforces","hasAdaptiveResponse","associatedWith","targetsProblem","targets","appliedTo","produces","hasSession","hasProblem","hasIntervention","hasHomework","evidencedBy","inSession"];
+
+const COLOR = {
+  Client:"#1D9E75", Session:"#1D9E75",
+  Problem:"#378ADD", Goal:"#378ADD",
+  CoreBelief:"#7F77DD", IntermediateBelief:"#7F77DD",
+  Situation:"#7F77DD", AutomaticThought:"#7F77DD",
+  Reaction:"#7F77DD", AdaptiveResponse:"#7F77DD",
+  Intervention:"#EF9F27", Homework:"#EF9F27",
+  missing:"#e0e0e0"
+};
+const BADGE_BG = {
+  Client:"#E1F5EE", Session:"#E1F5EE",
+  Problem:"#E6F1FB", Goal:"#E6F1FB",
+  CoreBelief:"#EEEDFE", IntermediateBelief:"#EEEDFE",
+  Situation:"#EEEDFE", AutomaticThought:"#EEEDFE",
+  Reaction:"#EEEDFE", AdaptiveResponse:"#EEEDFE",
+  Intervention:"#FAEEDA", Homework:"#FAEEDA",
+};
+const BADGE_COLOR = {
+  Client:"#0F6E56", Session:"#0F6E56",
+  Problem:"#185FA5", Goal:"#185FA5",
+  CoreBelief:"#3C3489", IntermediateBelief:"#3C3489",
+  Situation:"#3C3489", AutomaticThought:"#3C3489",
+  Reaction:"#3C3489", AdaptiveResponse:"#3C3489",
+  Intervention:"#633806", Homework:"#633806",
+};
+
+let nodes = [
+  {id:"client", label:"Client", x:260, y:55, status:"found", props:{} },
+  {id:"session", label:"Session", x:260, y:145, status:"found", props:{sessionType:"therapy"} },
+  {id:"prob1", label:"Problem", x:160, y:240, status:"found", props:{description:"no family, loving partner", domain:"social"} },
+  {id:"goal1", label:"Goal", x:360, y:240, status:"found", props:{statement:"have a good sleep"} },
+  {id:"cb1", label:"CoreBelief", x:180, y:340, status:"found", props:{content:"I am unlovable", domain:"self", category:"unlovable"} },
+  {id:"at1", label:"AutomaticThought", x:340, y:320, status:"found", props:{content:"there is no way forward", modality:"verbal", distortionType:"catastrophizing"} },
+  {id:"sit1", label:"Situation", x:420, y:220, status:"found", props:{description:"living alone with my loneliness", kind:"externalSituation"} },
+  {id:"react1", label:"Reaction", x:420, y:380, status:"found", props:{content:"anxious", channel:"emotional", valence:"negative"} },
+  {id:"hw1", label:"Homework", x:100, y:145, status:"missing", props:{} },
+];
+let edges = [
+  {id:"e1", from:"client", to:"session", predicate:"hasSession", status:"found"},
+  {id:"e2", from:"session", to:"prob1", predicate:"hasProblem", status:"found"},
+  {id:"e3", from:"session", to:"goal1", predicate:"hasSession", status:"found"},
+  {id:"e4", from:"cb1", to:"at1", predicate:"stemsFrom", status:"found"},
+  {id:"e5", from:"at1", to:"sit1", predicate:"triggers", status:"found"},
+  {id:"e6", from:"at1", to:"react1", predicate:"leadsTo", status:"found"},
+  {id:"e7", from:"prob1", to:"sit1", predicate:"manifestsAs", status:"placeholder"},
+];
+
+let selected = null; // {type:'node'|'edge', id}
+let edgeMode = false;
+let edgeFrom = null;
+let dpr = window.devicePixelRatio || 1;
+
+const gp = document.getElementById('gp');
+const cv = document.getElementById('gc');
+const ctx2 = cv.getContext('2d');
+
+function resize() {
+  const rect = gp.getBoundingClientRect();
+  const legendH = gp.querySelector('.legend').offsetHeight;
+  const headerH = gp.querySelector('.graph-header').offsetHeight;
+  const h = rect.height - legendH - headerH;
+  cv.style.width = rect.width + 'px';
+  cv.style.height = h + 'px';
+  cv.style.top = headerH + 'px';
+  cv.width = rect.width * dpr;
+  cv.height = h * dpr;
+  ctx2.scale(dpr, dpr);
+  draw();
+}
+
+function nodeAt(x, y) {
+  return nodes.find(n => Math.hypot(n.x - x, n.y - y) < 26);
+}
+
+function edgeAt(x, y) {
+  for (const e of edges) {
+    const a = nodes.find(n=>n.id===e.from), b = nodes.find(n=>n.id===e.to);
+    if (!a||!b) continue;
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    if (Math.hypot(mx-x, my-y) < 14) return e;
+  }
+  return null;
+}
+
+function draw() {
+  const W = cv.width/dpr, H = cv.height/dpr;
+  ctx2.clearRect(0,0,W,H);
+
+  for (const e of edges) {
+    const a = nodes.find(n=>n.id===e.from), b = nodes.find(n=>n.id===e.to);
+    if (!a||!b) continue;
+    const sel = selected && selected.type==='edge' && selected.id===e.id;
+    ctx2.save();
+    ctx2.strokeStyle = sel ? '#D85A30' : (e.status==='found' ? '#1D9E75' : '#bbb');
+    ctx2.lineWidth = sel ? 2.2 : 1.4;
+    if (e.status==='placeholder') ctx2.setLineDash([5,3]);
+    ctx2.beginPath();
+    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy);
+    const ux=dx/dist, uy=dy/dist;
+    const sx=a.x+ux*26, sy=a.y+uy*26, ex=b.x-ux*28, ey=b.y-uy*28;
+    ctx2.moveTo(sx,sy); ctx2.lineTo(ex,ey);
+    ctx2.stroke();
+    ctx2.setLineDash([]);
+    // arrow
+    const ang = Math.atan2(ey-sy, ex-sx);
+    ctx2.fillStyle = sel ? '#D85A30' : (e.status==='found' ? '#1D9E75' : '#bbb');
+    ctx2.beginPath();
+    ctx2.moveTo(ex,ey);
+    ctx2.lineTo(ex-9*Math.cos(ang-0.4), ey-9*Math.sin(ang-0.4));
+    ctx2.lineTo(ex-9*Math.cos(ang+0.4), ey-9*Math.sin(ang+0.4));
+    ctx2.closePath(); ctx2.fill();
+    // label at midpoint
+    const mx=(sx+ex)/2, my=(sy+ey)/2;
+    ctx2.font = '9px var(--font-sans)';
+    ctx2.fillStyle = sel ? '#D85A30' : (e.status==='found' ? '#0F6E56' : '#aaa');
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.fillText(e.predicate, mx, my-7);
+    ctx2.restore();
+  }
+
+  for (const n of nodes) {
+    const sel = selected && selected.type==='node' && selected.id===n.id;
+    const ef = edgeMode && edgeFrom === n.id;
+    ctx2.save();
+    const col = n.status==='missing' ? COLOR.missing : (COLOR[n.label]||'#aaa');
+    const isRect = n.label==='Problem'||n.label==='Goal';
+
+    if (sel || ef) {
+      ctx2.shadowColor = ef ? '#378ADD' : '#D85A30';
+      ctx2.shadowBlur = 10;
+    }
+
+    if (isRect) {
+      const rx=n.x-32, ry=n.y-22, rw=64, rh=44;
+      ctx2.fillStyle = n.status==='missing' ? '#f5f5f5' : (BADGE_BG[n.label]||'#eee');
+      ctx2.strokeStyle = sel ? '#D85A30' : col;
+      ctx2.lineWidth = sel ? 2.2 : 1.5;
+      if (n.status==='missing') ctx2.setLineDash([4,3]);
+      roundRect(ctx2, rx,ry,rw,rh,6); ctx2.fill(); ctx2.stroke();
+      ctx2.setLineDash([]);
+    } else {
+      ctx2.fillStyle = n.status==='missing' ? '#f5f5f5' : (BADGE_BG[n.label]||'#eee');
+      ctx2.strokeStyle = sel ? '#D85A30' : col;
+      ctx2.lineWidth = sel ? 2.2 : 1.5;
+      if (n.status==='missing') ctx2.setLineDash([4,3]);
+      ctx2.beginPath(); ctx2.arc(n.x, n.y, 26, 0, Math.PI*2); ctx2.fill(); ctx2.stroke();
+      ctx2.setLineDash([]);
+    }
+
+    ctx2.shadowBlur = 0;
+    const textCol = n.status==='missing' ? '#aaa' : (BADGE_COLOR[n.label]||'#333');
+    ctx2.fillStyle = textCol;
+    ctx2.textAlign='center'; ctx2.textBaseline='middle';
+    ctx2.font = '9px var(--font-sans)';
+    const shortLabel = n.label.length > 12 ? n.label.slice(0,10)+'…' : n.label;
+    ctx2.fillText(shortLabel, n.x, n.y - 6);
+    const mainProp = Object.values(n.props||{})[0] || '';
+    const shortProp = mainProp.toString().slice(0,12) + (mainProp.toString().length>12?'…':'');
+    ctx2.font = '8px var(--font-sans)';
+    ctx2.fillStyle = n.status==='missing' ? '#ccc' : col;
+    ctx2.fillText(shortProp, n.x, n.y + 6);
+
+    ctx2.restore();
+  }
+}
+
+function roundRect(c, x,y,w,h,r) {
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+
+let drag=null, dragOff={x:0,y:0};
+
+cv.addEventListener('mousedown', e => {
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const n = nodeAt(mx,my);
+  if (edgeMode) {
+    if (n) {
+      if (!edgeFrom) { edgeFrom=n.id; draw(); }
+      else if (edgeFrom !== n.id) { showCreateEdge(edgeFrom, n.id); edgeFrom=null; edgeMode=false; }
+    }
+    return;
+  }
+  if (n) { drag=n; dragOff={x:mx-n.x, y:my-n.y}; selectItem('node', n.id); return; }
+  const ed = edgeAt(mx,my);
+  if (ed) { selectItem('edge', ed.id); return; }
+  selected=null; showEmpty(); draw();
+});
+
+cv.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const r = cv.getBoundingClientRect();
+  drag.x = e.clientX - r.left - dragOff.x;
+  drag.y = e.clientY - r.top - dragOff.y;
+  draw();
+});
+cv.addEventListener('mouseup', () => { drag=null; });
+
+function selectItem(type, id) {
+  selected = {type, id};
+  draw();
+  if (type==='node') showNodePanel(nodes.find(n=>n.id===id));
+  else showEdgePanel(edges.find(e=>e.id===id));
+}
+
+function showEmpty() {
+  document.getElementById('dpEmpty').style.display='';
+  document.getElementById('dpContent').style.display='none';
+}
+
+function renderDP(body, actions) {
+  document.getElementById('dpEmpty').style.display='none';
+  const dc = document.getElementById('dpContent');
+  dc.style.display='flex';
+  dc.style.flexDirection='column';
+  document.getElementById('dpBody').innerHTML = body;
+  document.getElementById('dpActions').innerHTML = actions;
+}
+
+function showNodePanel(n) {
+  const badge = `<span class="dp-label-badge" style="background:${BADGE_BG[n.label]||'#eee'};color:${BADGE_COLOR[n.label]||'#333'};">${n.label}</span>`;
+  const statusTag = `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${n.status==='found'?'#E1F5EE':'#f0f0f0'};color:${n.status==='found'?'#0F6E56':'#888'};">${n.status}</span>`;
+  let fields = `<div class="dp-field">${badge} ${statusTag}</div>`;
+
+  const propEntries = Object.entries(n.props||{});
+  fields += `<div class="dp-field"><label>Node ID</label><input id="dpId" value="${n.id}" /></div>`;
+  fields += `<div class="dp-field"><label>Class</label><select id="dpClass">${NODE_CLASSES.map(c=>`<option${c===n.label?' selected':''}>${c}</option>`).join('')}</select></div>`;
+  fields += `<div class="dp-field"><label>Status</label><select id="dpStatus"><option${n.status==='found'?' selected':''}>found</option><option${n.status==='missing'?' selected':''}>missing</option></select></div>`;
+
+  if (propEntries.length===0) {
+    fields += `<div class="dp-field"><label>Properties</label><textarea id="dpProps" placeholder='{"content":"…"}'></textarea></div>`;
+  } else {
+    fields += `<div class="dp-field"><label>Properties (JSON)</label><textarea id="dpProps">${JSON.stringify(n.props, null, 1)}</textarea></div>`;
+  }
+
+  const evidTurns = (n.evidence||[]).join(', ') || '—';
+  fields += `<div class="dp-field"><label>Evidence turns</label><input value="${evidTurns}" /></div>`;
+
+  renderDP(fields,
+    `<button class="save" onclick="saveNode('${n.id}')">Save</button><button class="del" onclick="deleteNode('${n.id}')">Delete</button>`
+  );
+}
+
+function showEdgePanel(e) {
+  const fromNode = nodes.find(n=>n.id===e.from);
+  const toNode = nodes.find(n=>n.id===e.to);
+  const statusTag = `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${e.status==='found'?'#E1F5EE':'#f0f0f0'};color:${e.status==='found'?'#0F6E56':'#888'};">${e.status}</span>`;
+  let fields = `<div class="dp-field"><span style="font-size:11px;font-weight:500;color:var(--color-text-primary);">Edge</span> ${statusTag}</div>`;
+  fields += `<div class="dp-field"><label>Predicate</label><select id="dpPred">${PREDICATES.map(p=>`<option${p===e.predicate?' selected':''}>${p}</option>`).join('')}</select></div>`;
+  fields += `<div class="dp-field"><label>From</label><select id="dpFrom">${nodes.map(n=>`<option value="${n.id}"${n.id===e.from?' selected':''}>${n.label} (${n.id})</option>`).join('')}</select></div>`;
+  fields += `<div class="dp-field"><label>To</label><select id="dpTo">${nodes.map(n=>`<option value="${n.id}"${n.id===e.to?' selected':''}>${n.label} (${n.id})</option>`).join('')}</select></div>`;
+  fields += `<div class="dp-field"><label>Status</label><select id="dpEdgeStatus"><option${e.status==='found'?' selected':''}>found</option><option${e.status==='placeholder'?' selected':''}>placeholder</option></select></div>`;
+  if (e.predicate==='leadsTo') {
+    fields += `<div class="dp-field"><label>Reported intensity</label><input id="dpIntensity" value="${(e.props||{}).reportedIntensity||''}" placeholder="e.g. 8/10" /></div>`;
+  }
+  const evid = (e.evidence||[]).join(', ')||'—';
+  fields += `<div class="dp-field"><label>Evidence turns</label><input value="${evid}" /></div>`;
+
+  renderDP(fields,
+    `<button class="save" onclick="saveEdge('${e.id}')">Save</button><button class="del" onclick="deleteEdge('${e.id}')">Delete</button>`
+  );
+}
+
+function saveNode(id) {
+  const n = nodes.find(x=>x.id===id);
+  if (!n) return;
+  n.label = document.getElementById('dpClass').value;
+  n.status = document.getElementById('dpStatus').value;
+  try { n.props = JSON.parse(document.getElementById('dpProps').value||'{}'); } catch(e){}
+  draw(); showNodePanel(n);
+}
+function saveEdge(id) {
+  const e = edges.find(x=>x.id===id);
+  if (!e) return;
+  e.predicate = document.getElementById('dpPred').value;
+  e.from = document.getElementById('dpFrom').value;
+  e.to = document.getElementById('dpTo').value;
+  e.status = document.getElementById('dpEdgeStatus').value;
+  const ri = document.getElementById('dpIntensity');
+  if (ri) e.props = {...(e.props||{}), reportedIntensity: ri.value};
+  draw(); showEdgePanel(e);
+}
+function deleteNode(id) {
+  nodes = nodes.filter(n=>n.id!==id);
+  edges = edges.filter(e=>e.from!==id && e.to!==id);
+  selected=null; showEmpty(); draw();
+}
+function deleteEdge(id) {
+  edges = edges.filter(e=>e.id!==id);
+  selected=null; showEmpty(); draw();
+}
+
+function showCreateEdge(fromId, toId) {
+  const m = document.getElementById('createModal');
+  const b = document.getElementById('modalBox');
+  b.innerHTML = `
+    <div class="modal-title">Add edge</div>
+    <div class="modal-field"><label>From</label><input value="${fromId}" readonly/></div>
+    <div class="modal-field"><label>To</label><input value="${toId}" readonly/></div>
+    <div class="modal-field"><label>Predicate</label><select id="mPred">${PREDICATES.map(p=>`<option>${p}</option>`).join('')}</select></div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="confirm" onclick="confirmEdge('${fromId}','${toId}')">Add</button>
+    </div>
+  `;
+  m.style.display='flex';
+}
+
+function confirmEdge(from, to) {
+  const pred = document.getElementById('mPred').value;
+  const id = 'e' + Date.now();
+  edges.push({id, from, to, predicate:pred, status:'found', evidence:[], props:{}});
+  closeModal(); draw();
+}
+
+document.getElementById('btnNode').addEventListener('click', () => {
+  const m = document.getElementById('createModal');
+  const b = document.getElementById('modalBox');
+  b.innerHTML = `
+    <div class="modal-title">Add node</div>
+    <div class="modal-field"><label>Class</label><select id="mClass">${NODE_CLASSES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="modal-field"><label>Main text / content</label><textarea id="mText" placeholder="e.g. I will never succeed"></textarea></div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="confirm" onclick="confirmNode()">Add</button>
+    </div>
+  `;
+  m.style.display='flex';
+});
+
+function confirmNode() {
+  const cls = document.getElementById('mClass').value;
+  const txt = document.getElementById('mText').value;
+  const propKey = {Problem:'description',Goal:'statement',CoreBelief:'content',IntermediateBelief:'content',Situation:'description',AutomaticThought:'content',Reaction:'content',AdaptiveResponse:'content',Intervention:'description',Homework:'taskDescription',Client:'',Session:''}[cls]||'content';
+  const id = cls.toLowerCase().slice(0,3) + '_' + Date.now();
+  const r = cv.getBoundingClientRect();
+  nodes.push({id, label:cls, x: 80 + Math.random()*280, y: 60 + Math.random()*220, status:'found', props: propKey ? {[propKey]: txt} : {}});
+  closeModal(); draw();
+}
+
+document.getElementById('btnEdge').addEventListener('click', () => {
+  edgeMode = true; edgeFrom = null;
+  const gph = gp.querySelector('.graph-header span');
+  gph.textContent = 'Click source node, then target node to connect';
+  setTimeout(() => { edgeMode=false; edgeFrom=null; if(gph) gph.innerHTML = `<span class="live-dot" style="display:inline-block;margin-right:5px;vertical-align:middle;"></span>Knowledge graph · ${nodes.length} nodes · ${edges.length} edges`; }, 8000);
+});
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  const data = JSON.stringify({nodes, edges}, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='cbt_graph.json'; a.click();
+});
+
+function closeModal() { document.getElementById('createModal').style.display='none'; }
+
+window.saveNode=saveNode; window.saveEdge=saveEdge;
+window.deleteNode=deleteNode; window.deleteEdge=deleteEdge;
+window.confirmEdge=confirmEdge; window.confirmNode=confirmNode;
+window.closeModal=closeModal;
+
+new ResizeObserver(resize).observe(gp);
+resize();
+</script>

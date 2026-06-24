@@ -517,6 +517,34 @@ def emotion_valence_from_text(text: str) -> str | None:
     return None
 
 
+def apply_gating_constraints(label: str, props: dict) -> dict:
+    """Enforce §3.3 property-population constraints in place and return props.
+
+    Rules:
+    1. CoreBelief.category → null unless domain=="self"
+    2. Reaction.valence → null unless channel=="emotional"
+    3. Intervention.techniqueLabel → absent unless technique=="other"
+    4. AutomaticThought.modality defaults to "verbal"
+    5. Homework.isOptional defaults to False
+    (Situation.temporality gating is handled by temporality_from_text;
+     AutomaticThought.distortionType may be "none" — no code enforcement needed.)
+    """
+    if label == "CoreBelief":
+        if props.get("domain") != "self":
+            props.pop("category", None)
+    elif label == "Reaction":
+        if props.get("channel") != "emotional":
+            props.pop("valence", None)
+    elif label == "Intervention":
+        if props.get("technique") != "other":
+            props.pop("techniqueLabel", None)
+    elif label == "AutomaticThought":
+        props.setdefault("modality", "verbal")
+    elif label == "Homework":
+        props.setdefault("isOptional", False)
+    return props
+
+
 # ===========================================================================
 # Schema adapter — implements the Schema Protocol from interfaces.py
 # ===========================================================================

@@ -1,0 +1,199 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); font-size: 14px; background: var(--color-background-tertiary); }
+
+  .app-shell { display: flex; flex-direction: column; height: 100vh; min-height: 600px; background: var(--color-background-tertiary); }
+
+  .tab-bar { display: flex; gap: 0; border-bottom: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); padding: 0 20px; }
+  .tab { padding: 12px 16px; font-size: 13px; color: var(--color-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; }
+  .tab.active { color: #D85A30; border-bottom-color: #D85A30; font-weight: 500; }
+
+  .workspace { display: flex; flex: 1; overflow: hidden; gap: 0; }
+
+  .chat-panel { display: flex; flex-direction: column; flex: 0 0 460px; background: var(--color-background-primary); border-right: 0.5px solid var(--color-border-tertiary); }
+
+  .session-bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .phase-badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; background: #E6F1FB; color: #185FA5; }
+  .technique-tag { font-size: 11px; color: var(--color-text-secondary); padding: 3px 10px; border-radius: 20px; border: 0.5px solid var(--color-border-secondary); }
+  .turn-count { font-size: 11px; color: var(--color-text-tertiary); margin-left: auto; }
+
+  .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  .msg-therapist { display: flex; gap: 10px; align-items: flex-start; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: #E1F5EE; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; color: #0F6E56; flex-shrink: 0; margin-top: 2px; }
+  .bubble-therapist { background: var(--color-background-secondary); border-radius: 0 12px 12px 12px; padding: 10px 14px; max-width: 340px; font-size: 13px; line-height: 1.6; color: var(--color-text-primary); }
+  .technique-hint { font-size: 10px; color: var(--color-text-tertiary); margin-top: 4px; padding-left: 38px; }
+
+  .msg-client { display: flex; justify-content: flex-end; }
+  .bubble-client { background: #D85A30; border-radius: 12px 0 12px 12px; padding: 10px 14px; max-width: 300px; font-size: 13px; line-height: 1.6; color: #fff; }
+
+  .input-bar { padding: 12px 16px; border-top: 0.5px solid var(--color-border-tertiary); display: flex; gap: 8px; align-items: center; }
+  .input-bar input { flex: 1; border: 0.5px solid var(--color-border-secondary); border-radius: 20px; padding: 8px 16px; font-size: 13px; background: var(--color-background-secondary); color: var(--color-text-primary); outline: none; }
+  .send-btn { background: #D85A30; color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+  .graph-panel { flex: 1; display: flex; flex-direction: column; background: var(--color-background-primary); }
+  .graph-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .graph-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
+  .graph-status { font-size: 11px; color: var(--color-text-tertiary); display: flex; align-items: center; gap: 5px; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .graph-canvas { flex: 1; position: relative; overflow: hidden; }
+  .graph-canvas svg { width: 100%; height: 100%; }
+
+  .legend { padding: 10px 16px; border-top: 0.5px solid var(--color-border-tertiary); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dot.session { background: #1D9E75; }
+  .legend-dot.cognitive { background: #7F77DD; }
+  .legend-dot.structure { background: #378ADD; }
+  .legend-dot.missing { background: #dee2e6; border: 1px dashed #aaa; }
+  .legend-line { width: 16px; height: 2px; background: #1D9E75; flex-shrink: 0; }
+  .legend-line.dashed { background: repeating-linear-gradient(90deg,#bbb 0,#bbb 3px,transparent 3px,transparent 6px); }
+</style>
+
+<div class="app-shell">
+  <div class="tab-bar">
+    <div class="tab active">Therapy — Part 1</div>
+    <div class="tab">Query — Part 2</div>
+  </div>
+
+  <div class="workspace">
+    <div class="chat-panel">
+      <div class="session-bar">
+        <span class="phase-badge">Exploration</span>
+        <span class="technique-tag">Problem-solving skills</span>
+        <span class="turn-count">Turn 8</span>
+      </div>
+
+      <div class="messages">
+        <div class="msg-therapist">
+          <div class="avatar">T</div>
+          <div>
+            <div class="bubble-therapist">It sounds like those overwhelming feelings make it hard to find peace or rest. When that thought comes up — that there's a 'problem' with how you handle emotions — what does that tell you about what you need right now?</div>
+          </div>
+        </div>
+        <div class="technique-hint">Problem-solving skills · Exploration</div>
+
+        <div class="msg-client">
+          <div class="bubble-client">I have to find a way to deal with that. I know but I just can't do it.</div>
+        </div>
+
+        <div class="msg-therapist">
+          <div class="avatar">T</div>
+          <div>
+            <div class="bubble-therapist">It is completely understandable to feel stuck when the feelings seem too big to handle on your own. If we looked at this as a challenge rather than a permanent flaw, what is one small step that feels just manageable enough to try?</div>
+          </div>
+        </div>
+        <div class="technique-hint">Problem-solving skills · Exploration</div>
+      </div>
+
+      <div class="input-bar">
+        <input type="text" placeholder="Share what's on your mind…" />
+        <button class="send-btn">Send</button>
+      </div>
+    </div>
+
+    <div class="graph-panel">
+      <div class="graph-header">
+        <span class="graph-title">Knowledge graph — live</span>
+        <span class="graph-status"><span class="live-dot"></span>Updated 2s ago · 9 nodes</span>
+      </div>
+
+      <div class="graph-canvas">
+        <svg viewBox="0 0 520 420" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-sans)">
+          <defs>
+            <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#1D9E75"/>
+            </marker>
+            <marker id="arr-miss" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#bbb"/>
+            </marker>
+          </defs>
+
+          <!-- Missing placeholder nodes (grey, dashed) -->
+          <circle cx="80" cy="100" r="28" fill="#f5f5f5" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="80" y="97" text-anchor="middle" font-size="9" fill="#999">Homework</text>
+          <text x="80" y="108" text-anchor="middle" font-size="8" fill="#bbb">missing</text>
+
+          <circle cx="80" cy="200" r="28" fill="#f5f5f5" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="80" y="197" text-anchor="middle" font-size="9" fill="#999">Intervention</text>
+          <text x="80" y="208" text-anchor="middle" font-size="8" fill="#bbb">missing</text>
+
+          <circle cx="80" cy="300" r="28" fill="#f5f5f5" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="80" y="297" text-anchor="middle" font-size="9" fill="#999">Utterance</text>
+          <text x="80" y="308" text-anchor="middle" font-size="8" fill="#bbb">missing</text>
+
+          <!-- Session structure (green) -->
+          <circle cx="200" cy="60" r="30" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.5"/>
+          <text x="200" y="57" text-anchor="middle" font-size="9" font-weight="500" fill="#085041">Client</text>
+
+          <circle cx="200" cy="150" r="30" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.5"/>
+          <text x="200" y="147" text-anchor="middle" font-size="9" font-weight="500" fill="#085041">Session</text>
+
+          <!-- hasSession arrow -->
+          <line x1="200" y1="90" x2="200" y2="120" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr)"/>
+          <text x="210" y="109" font-size="8" fill="#1D9E75">hasSession</text>
+
+          <!-- Session structure nodes (blue) -->
+          <rect x="140" y="220" width="62" height="38" rx="6" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.5"/>
+          <text x="171" y="237" text-anchor="middle" font-size="9" font-weight="500" fill="#0C447C">Problem</text>
+          <text x="171" y="249" text-anchor="middle" font-size="8" fill="#185FA5">no family</text>
+
+          <rect x="240" y="220" width="62" height="38" rx="6" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.5"/>
+          <text x="271" y="237" text-anchor="middle" font-size="9" font-weight="500" fill="#0C447C">Goal</text>
+          <text x="271" y="249" text-anchor="middle" font-size="8" fill="#185FA5">good sleep</text>
+
+          <!-- Session → Problem, Goal -->
+          <line x1="200" y1="180" x2="171" y2="220" stroke="#378ADD" stroke-width="1.2" marker-end="url(#arr)"/>
+          <line x1="200" y1="180" x2="271" y2="220" stroke="#378ADD" stroke-width="1.2" marker-end="url(#arr)"/>
+
+          <!-- Cognitive chain (purple) -->
+          <circle cx="310" cy="105" r="34" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.5"/>
+          <text x="310" y="100" text-anchor="middle" font-size="9" font-weight="500" fill="#3C3489">CoreBelief</text>
+          <text x="310" y="113" text-anchor="middle" font-size="8" fill="#534AB7">I am unlovable</text>
+
+          <circle cx="410" cy="160" r="34" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.5"/>
+          <text x="410" y="153" text-anchor="middle" font-size="9" font-weight="500" fill="#3C3489">AutomaticThought</text>
+          <text x="410" y="166" text-anchor="middle" font-size="8" fill="#534AB7">no way forward</text>
+
+          <circle cx="440" cy="270" r="30" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.5"/>
+          <text x="440" y="265" text-anchor="middle" font-size="9" font-weight="500" fill="#3C3489">Situation</text>
+          <text x="440" y="278" text-anchor="middle" font-size="8" fill="#534AB7">living alone</text>
+
+          <circle cx="350" cy="340" r="30" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.5"/>
+          <text x="350" y="335" text-anchor="middle" font-size="9" font-weight="500" fill="#3C3489">Reaction</text>
+          <text x="350" y="348" text-anchor="middle" font-size="8" fill="#534AB7">anxious</text>
+
+          <circle cx="200" cy="340" r="34" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.5"/>
+          <text x="200" y="335" text-anchor="middle" font-size="9" font-weight="500" fill="#3C3489">CoreBelief</text>
+          <text x="200" y="348" text-anchor="middle" font-size="8" fill="#534AB7">unworthy of love</text>
+
+          <!-- Cognitive edges -->
+          <path d="M310,139 Q355,140 376,143" stroke="#7F77DD" stroke-width="1.3" fill="none" marker-end="url(#arr)"/>
+          <text x="336" y="134" font-size="8" fill="#7F77DD">stemsFrom</text>
+
+          <path d="M415,194 Q430,225 440,240" stroke="#7F77DD" stroke-width="1.3" fill="none" marker-end="url(#arr)"/>
+          <text x="444" y="225" font-size="8" fill="#7F77DD">triggers</text>
+
+          <path d="M416,193 Q400,255 375,315" stroke="#7F77DD" stroke-width="1.3" fill="none" marker-end="url(#arr)"/>
+          <text x="386" y="257" font-size="8" fill="#7F77DD">leadsTo</text>
+
+          <!-- Problem → manifestsAs → Situation -->
+          <path d="M200,258 Q310,250 410,240" stroke="#378ADD" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+          <text x="295" y="242" font-size="8" fill="#378ADD">manifestsAs</text>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot session"></div>Session structure</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#378ADD; border-radius:3px; width:10px; height:10px;"></div>Problem / Goal</div>
+        <div class="legend-item"><div class="legend-dot cognitive"></div>Cognitive model</div>
+        <div class="legend-item"><div class="legend-dot missing"></div>Not yet found</div>
+        <div class="legend-item"><div class="legend-line"></div>Found edge</div>
+        <div class="legend-item"><div class="legend-line dashed"></div>Inferred edge</div>
+      </div>
+    </div>
+  </div>
+</div>
