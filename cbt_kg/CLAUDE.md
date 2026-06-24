@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 The runtime code lives in the `cbt_kg/` package at the repo root; this file
 sits inside it (`cbt_kg/CLAUDE.md`). All commands below are run from the repo
@@ -21,6 +21,24 @@ pytest cbt_kg/tests/test_therapy.py::test_async_turn_returns_expected_keys   # s
 Offline (no Ollama): tests already default to `EXTRACTOR=stub GENERATOR=echo`
 (see `cbt_kg/conftest.py`). For manual runs, set those in `cbt_kg/.env` to
 bypass Ollama.
+
+## Environment variables (`cbt_kg/.env`)
+
+| Var | Values | Default |
+|-----|--------|---------|
+| `GRAPH_BACKEND` | `memory` \| `neo4j` | `memory` |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | — | — |
+| `EXTRACTOR` | `local` \| `stub` | `local` |
+| `GENERATOR` | `local` \| `openrouter` \| `echo` | `local` |
+| `OLLAMA_MODEL` | any Ollama tag | `qwen3.5-nothink` |
+| `OLLAMA_HOST` | URL | `http://localhost:11434` |
+| `LOCAL_LLM_MODEL` | any Ollama tag | falls back to `OLLAMA_MODEL` |
+| `LOCAL_LLM_BASE_URL` | URL (`/v1` suffix stripped internally) | `http://localhost:11434/v1` |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | — | `anthropic/claude-sonnet-4-6` |
+| `EXTRACT_LANGUAGE` | `English` \| `Thai` | `English` |
+| `EXTRACT_FAST` | `0` \| `1` | `0` — set `1` to collapse Stage 2.5 into Stage 1 for fewer LLM calls (lower fidelity) |
+| `CONSOLIDATE_EVERY` | integer | `6` — Tier B fires every Nth client turn as a detached background task |
+| `EXTRACTION_TIMEOUT` | seconds | `8` — defined for reference; extraction is always awaited (no enforced cutoff in the current code) |
 
 ## Layout (PRD_cbt_v7.md §2)
 
@@ -158,5 +176,6 @@ invent facts.
 - Sessions and loaded query-graphs are process-local dicts in `api.py`;
   restart wipes them. No persistence layer.
 - `api.py` mounts Gradio **after** all FastAPI routes are defined.
-- `EXTRACTION_TIMEOUT` is informational — extraction is awaited before the
-  response returns. Tier B is what actually decouples from the response.
+- `EXTRACTION_TIMEOUT` is defined and configurable but is not currently
+  enforced as an `asyncio.wait_for` cutoff — extraction is always awaited.
+  Tier B is what actually decouples from the response.
