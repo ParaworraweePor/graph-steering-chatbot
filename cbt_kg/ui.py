@@ -25,31 +25,28 @@ from .therapy import Session, turn
 # Color / style constants
 # ─────────────────────────────────────────────────────────────────────────
 
-_COLOR = {
-    "Client": "#1D9E75", "Session": "#1D9E75",
-    "Problem": "#378ADD", "Goal": "#378ADD",
-    "CoreBelief": "#7F77DD", "IntermediateBelief": "#7F77DD",
-    "Situation": "#7F77DD", "AutomaticThought": "#7F77DD",
-    "Reaction": "#7F77DD", "AdaptiveResponse": "#7F77DD",
-    "Intervention": "#EF9F27", "Homework": "#EF9F27",
-    "missing": "#e0e0e0",
+NODE_COLORS: dict[str, tuple[str, str, str]] = {
+    # label: (fill, stroke, text)
+    "Client":              ("#E5E7EB", "#D1D5DB", "#1F2937"),
+    "Session":             ("#E5E7EB", "#D1D5DB", "#1F2937"),
+    "Problem":             ("#F87171", "#EF4444", "#FFFFFF"),
+    "Goal":                ("#34D399", "#10B981", "#1F2937"),
+    "Intervention":        ("#A78BFA", "#8B5CF6", "#FFFFFF"),
+    "Homework":            ("#FBBF24", "#F59E0B", "#1F2937"),
+    "CoreBelief":          ("#9D174D", "#831843", "#FFFFFF"),
+    "IntermediateBelief":  ("#BE185D", "#9D174D", "#FFFFFF"),
+    "Situation":           ("#FDE047", "#FACC15", "#1F2937"),
+    "AutomaticThought":    ("#6EE7B7", "#34D399", "#1F2937"),
+    "Reaction":            ("#FCA5A5", "#F87171", "#1F2937"),
+    "AdaptiveResponse":    ("#D1FAE5", "#6EE7B7", "#065F46"),
+    "Utterance":           ("#D1D5DB", "#9CA3AF", "#1F2937"),
 }
-_BADGE_BG = {
-    "Client": "#E1F5EE", "Session": "#E1F5EE",
-    "Problem": "#E6F1FB", "Goal": "#E6F1FB",
-    "CoreBelief": "#EEEDFE", "IntermediateBelief": "#EEEDFE",
-    "Situation": "#EEEDFE", "AutomaticThought": "#EEEDFE",
-    "Reaction": "#EEEDFE", "AdaptiveResponse": "#EEEDFE",
-    "Intervention": "#FAEEDA", "Homework": "#FAEEDA",
-}
-_BADGE_COLOR = {
-    "Client": "#0F6E56", "Session": "#0F6E56",
-    "Problem": "#185FA5", "Goal": "#185FA5",
-    "CoreBelief": "#3C3489", "IntermediateBelief": "#3C3489",
-    "Situation": "#3C3489", "AutomaticThought": "#3C3489",
-    "Reaction": "#3C3489", "AdaptiveResponse": "#3C3489",
-    "Intervention": "#633806", "Homework": "#633806",
-}
+_MISSING_COLORS = ("#F5F5F5", "#AAAAAA", "#AAAAAA")
+
+_COLOR = {k: v[1] for k, v in NODE_COLORS.items()}    # stroke
+_BADGE_BG = {k: v[0] for k, v in NODE_COLORS.items()}  # fill
+_BADGE_COLOR = {k: v[2] for k, v in NODE_COLORS.items()}  # text
+_COLOR["missing"] = _MISSING_COLORS[1]
 
 _PREDICATES = [
     "triggers", "leadsTo", "stemsFrom", "givesRiseTo",
@@ -218,11 +215,21 @@ canvas { position: absolute; top: 0; left: 0; cursor: pointer; }
     <div class="graph-panel" id="gp">
       <canvas id="gc"></canvas>
       <div class="legend">
-        <div class="leg"><div class="ld" style="background:#1D9E75;"></div>Session</div>
-        <div class="leg"><div class="ld" style="background:#378ADD;border-radius:2px;"></div>Problem/Goal</div>
-        <div class="leg"><div class="ld" style="background:#7F77DD;"></div>Cognitive</div>
-        <div class="leg"><div class="ld" style="background:#EF9F27;border-radius:2px;"></div>Intervention</div>
-        <div class="leg"><div class="ld" style="background:#dee2e6;border:1px dashed #aaa;"></div>Missing</div>
+        <div class="leg"><div class="ld" style="background:#E5E7EB;border:1px solid #D1D5DB;"></div>Client</div>
+        <div class="leg"><div class="ld" style="background:#E5E7EB;border:1px solid #D1D5DB;"></div>Session</div>
+        <div class="leg"><div class="ld" style="background:#F87171;border:1px solid #EF4444;border-radius:2px;"></div>Problem</div>
+        <div class="leg"><div class="ld" style="background:#34D399;border:1px solid #10B981;border-radius:2px;"></div>Goal</div>
+        <div class="leg"><div class="ld" style="background:#A78BFA;border:1px solid #8B5CF6;"></div>Intervention</div>
+        <div class="leg"><div class="ld" style="background:#FBBF24;border:1px solid #F59E0B;"></div>Homework</div>
+        <div style="width:100%;height:0;"></div>
+        <div class="leg"><div class="ld" style="background:#9D174D;border:1px solid #831843;"></div>CoreBelief</div>
+        <div class="leg"><div class="ld" style="background:#BE185D;border:1px solid #9D174D;"></div>IntermBelief</div>
+        <div class="leg"><div class="ld" style="background:#FDE047;border:1px solid #FACC15;"></div>Situation</div>
+        <div class="leg"><div class="ld" style="background:#6EE7B7;border:1px solid #34D399;"></div>AutoThought</div>
+        <div class="leg"><div class="ld" style="background:#FCA5A5;border:1px solid #F87171;"></div>Reaction</div>
+        <div class="leg"><div class="ld" style="background:#D1FAE5;border:1px solid #6EE7B7;"></div>AdaptResponse</div>
+        <div style="width:100%;height:0;"></div>
+        <div class="leg"><div class="ld" style="background:#D1D5DB;border:1px solid #9CA3AF;"></div>Utterance</div>
         <div class="leg"><div style="width:16px;height:1.5px;background:#1D9E75;"></div>Found</div>
         <div class="leg"><div style="width:16px;height:1.5px;background:repeating-linear-gradient(90deg,#bbb 0,#bbb 3px,transparent 3px,transparent 6px);"></div>Placeholder</div>
       </div>
@@ -264,50 +271,85 @@ const LAYERS = {
   Reaction: 5, AdaptiveResponse: 5,
 };
 const RIGHT_SIDE = new Set(["Intervention", "Homework"]);
+const RECT_LABELS = new Set(["Problem", "Goal"]);
+const RADIUS_CIRCLE = 28;
+const RADIUS_RECT_H = 22;
+const RADIUS_RECT_W = 38;
+const ARROW_CLEARANCE = 8;
+const CURVE = 28;
 
 function applyLayout(W, H) {
-  const layerCounts = {};
-  for (const n of nodes) {
-    const l = LAYERS[n.label] !== undefined ? LAYERS[n.label] : 6;
-    layerCounts[l] = (layerCounts[l] || 0) + 1;
-  }
-  const layerIdx = {};
+  const MARGIN = 48;
+  const RIGHT_W = 160;
+  const MAIN_W = W - RIGHT_W - MARGIN * 2;
+
+  // Bucket nodes into layer groups and right-side groups
+  const layerGroups = {};
+  const rightGroups = {};
   for (const n of nodes) {
     if (RIGHT_SIDE.has(n.label)) {
-      n.x = W - 60;
-      const k = n.label;
-      layerIdx[k] = (layerIdx[k] || 0);
-      n.y = 60 + layerIdx[k] * 80;
-      layerIdx[k]++;
-      continue;
+      if (!rightGroups[n.label]) rightGroups[n.label] = [];
+      rightGroups[n.label].push(n);
+    } else {
+      const l = LAYERS[n.label] !== undefined ? LAYERS[n.label] : 6;
+      if (!layerGroups[l]) layerGroups[l] = [];
+      layerGroups[l].push(n);
     }
-    const l = LAYERS[n.label] !== undefined ? LAYERS[n.label] : 6;
-    layerIdx[l] = layerIdx[l] || 0;
-    const cnt = layerCounts[l] || 1;
-    const spacing = Math.min(120, (W - 120) / cnt);
-    n.x = 60 + spacing * layerIdx[l] + spacing / 2;
-    n.y = 60 + l * 75;
-    layerIdx[l]++;
   }
 
-  // Spring-force refinement (~40 iterations)
-  for (let iter = 0; iter < 40; iter++) {
+  const mainLayers = Object.keys(layerGroups).map(Number).sort(function(a,b){return a-b;});
+  const totalLayers = mainLayers.length;
+  const nodeBaseY = {};
+
+  // Step 1 — hierarchical slot assignment
+  mainLayers.forEach(function(l, layerIndex) {
+    const row = layerGroups[l];
+    const count = row.length;
+    const slotW = MAIN_W / count;
+    const layerH = totalLayers > 1 ? (H - MARGIN * 2) / (totalLayers - 1) : H / 2;
+    const yPos = MARGIN + layerIndex * layerH;
+    row.forEach(function(n, i) {
+      n.x = MARGIN + slotW * i + slotW / 2;
+      n.y = yPos;
+      nodeBaseY[n.id] = yPos;
+    });
+  });
+
+  // RIGHT_SIDE: group by label, distribute vertically
+  const rightLabelOrder = Object.keys(rightGroups);
+  const rightLabelCount = rightLabelOrder.length;
+  rightLabelOrder.forEach(function(label, labelIdx) {
+    const group = rightGroups[label];
+    const groupSlotH = rightLabelCount > 0 ? (H - MARGIN * 2) / rightLabelCount : H - MARGIN * 2;
+    const slotStart = MARGIN + labelIdx * groupSlotH;
+    const itemH = group.length > 1 ? groupSlotH / group.length : groupSlotH;
+    group.forEach(function(n, i) {
+      n.x = W - RIGHT_W / 2;
+      n.y = slotStart + itemH * i + itemH / 2;
+    });
+  });
+
+  // Step 2 — spring-force refinement (80 iterations, annealed)
+  for (let iter = 0; iter < 80; iter++) {
+    const step = 0.4 * Math.pow(0.97, iter);
     const force = {};
     for (const n of nodes) force[n.id] = {x: 0, y: 0};
-    // Repulsion
+
+    // Repulsion (all pairs)
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
         const dx = b.x - a.x, dy = b.y - a.y;
         const dist = Math.max(Math.hypot(dx, dy), 1);
-        const rep = 2200 / (dist * dist);
+        const rep = Math.min(8000 / (dist * dist), 60);
         const ux = dx / dist, uy = dy / dist;
         force[a.id].x -= ux * rep;
-        force[a.id].y -= uy * rep;
+        force[a.id].y -= uy * rep * 0.15;
         force[b.id].x += ux * rep;
-        force[b.id].y += uy * rep;
+        force[b.id].y += uy * rep * 0.15;
       }
     }
+
     // Attraction along edges
     const nodeMap = {};
     for (const n of nodes) nodeMap[n.id] = n;
@@ -316,16 +358,24 @@ function applyLayout(W, H) {
       if (!a || !b) continue;
       const dx = b.x - a.x, dy = b.y - a.y;
       const dist = Math.max(Math.hypot(dx, dy), 1);
-      const att = dist * 0.05;
+      const att = (dist - 130) * 0.03;
       const ux = dx / dist, uy = dy / dist;
       force[a.id].x += ux * att;
       force[a.id].y += uy * att;
       force[b.id].x -= ux * att;
       force[b.id].y -= uy * att;
     }
+
+    // Apply forces with layer-aware boundary clamping
     for (const n of nodes) {
-      n.x = Math.max(36, Math.min(W - 36, n.x + force[n.id].x * 0.3));
-      n.y = Math.max(36, Math.min(H - 36, n.y + force[n.id].y * 0.3));
+      if (RIGHT_SIDE.has(n.label)) {
+        n.x = Math.max(W - RIGHT_W - 10, Math.min(W - 30, n.x + force[n.id].x * step));
+        n.y = Math.max(30, Math.min(H - 30, n.y + force[n.id].y * step));
+      } else {
+        const yBase = nodeBaseY[n.id] !== undefined ? nodeBaseY[n.id] : H / 2;
+        n.x = Math.max(MARGIN + 20, Math.min(MARGIN + MAIN_W - 20, n.x + force[n.id].x * step));
+        n.y = Math.max(yBase - 25, Math.min(yBase + 25, n.y + force[n.id].y * step));
+      }
     }
   }
 }
@@ -335,7 +385,7 @@ const gp = document.getElementById('gp');
 const cv = document.getElementById('gc');
 const ctx = cv.getContext('2d');
 let dpr = window.devicePixelRatio || 1;
-let layoutDone = false;
+let lastNodeCount = 0;
 
 function resize() {
   const rect = gp.getBoundingClientRect();
@@ -349,9 +399,9 @@ function resize() {
   cv.width = w * dpr;
   cv.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!layoutDone && nodes.length > 0 && w > 50 && h > 50) {
+  if (nodes.length > 0 && w > 50 && h > 50 && nodes.length !== lastNodeCount) {
     applyLayout(w, h);
-    layoutDone = true;
+    lastNodeCount = nodes.length;
   }
   draw();
 }
@@ -385,16 +435,14 @@ function roundRect(c, x, y, w, h, r) {
 }
 
 function nodeAt(x, y) {
-  // Check rect nodes first
   for (const n of nodes) {
-    if (n.label === 'Problem' || n.label === 'Goal') {
-      if (x >= n.x-34 && x <= n.x+34 && y >= n.y-24 && y <= n.y+24) return n;
+    if (RECT_LABELS.has(n.label)) {
+      if (x >= n.x-RADIUS_RECT_W && x <= n.x+RADIUS_RECT_W && y >= n.y-RADIUS_RECT_H && y <= n.y+RADIUS_RECT_H) return n;
     }
   }
-  // Then circles
   for (const n of nodes) {
-    if (n.label !== 'Problem' && n.label !== 'Goal') {
-      if (Math.hypot(n.x - x, n.y - y) < 28) return n;
+    if (!RECT_LABELS.has(n.label)) {
+      if (Math.hypot(n.x - x, n.y - y) < RADIUS_CIRCLE) return n;
     }
   }
   return null;
@@ -432,21 +480,29 @@ function draw() {
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = Math.max(Math.hypot(dx, dy), 1);
     const ux = dx / dist, uy = dy / dist;
-    const r1 = 28, r2 = 30;
-    const sx = a.x + ux * r1, sy = a.y + uy * r1;
-    const ex = b.x - ux * r2, ey = b.y - uy * r2;
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    const startR = RECT_LABELS.has(a.label) ? RADIUS_RECT_H : RADIUS_CIRCLE;
+    const endR   = RECT_LABELS.has(b.label) ? RADIUS_RECT_H : RADIUS_CIRCLE;
+    const sx = a.x + ux * startR, sy = a.y + uy * startR;
+    const ex = b.x - ux * (endR + ARROW_CLEARANCE), ey = b.y - uy * (endR + ARROW_CLEARANCE);
+    // Bezier control points (lateral offset perpendicular to edge)
+    const cx1 = sx + uy * CURVE, cy1 = sy - ux * CURVE;
+    const cx2 = ex + uy * CURVE, cy2 = ey - ux * CURVE;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, ex, ey);
+    ctx.stroke();
     ctx.setLineDash([]);
-    // Arrow head
-    const ang = Math.atan2(ey - sy, ex - sx);
+    // Arrow head using final bezier tangent
+    const ang = Math.atan2(ey - cy2, ex - cx2);
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.moveTo(ex, ey);
     ctx.lineTo(ex - 9 * Math.cos(ang - 0.4), ey - 9 * Math.sin(ang - 0.4));
     ctx.lineTo(ex - 9 * Math.cos(ang + 0.4), ey - 9 * Math.sin(ang + 0.4));
     ctx.closePath(); ctx.fill();
-    // Edge label at midpoint
-    const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+    // Edge label at bezier midpoint offset laterally
+    const mx = (sx + ex) / 2 + uy * CURVE * 0.5;
+    const my = (sy + ey) / 2 - ux * CURVE * 0.5;
     ctx.font = '9px system-ui,sans-serif';
     ctx.fillStyle = sel ? '#D85A30' : (isFound ? '#0F6E56' : '#aaa');
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -461,8 +517,8 @@ function draw() {
     ctx.save();
     const isMissing = n.status === 'missing';
     const col = isMissing ? COLOR['missing'] : (COLOR[n.label] || '#aaa');
-    const bgCol = isMissing ? '#f5f5f5' : (BADGE_BG[n.label] || '#eee');
-    const isRect = n.label === 'Problem' || n.label === 'Goal';
+    const bgCol = isMissing ? '#F5F5F5' : (BADGE_BG[n.label] || '#eee');
+    const isRect = RECT_LABELS.has(n.label);
 
     if (sel || efrom) {
       ctx.shadowColor = efrom ? '#378ADD' : '#D85A30';
@@ -475,9 +531,9 @@ function draw() {
     if (isMissing) ctx.setLineDash([4, 3]);
 
     if (isRect) {
-      roundRect(ctx, n.x - 34, n.y - 24, 68, 48, 6);
+      roundRect(ctx, n.x - RADIUS_RECT_W, n.y - RADIUS_RECT_H, RADIUS_RECT_W * 2, RADIUS_RECT_H * 2, 6);
     } else {
-      ctx.beginPath(); ctx.arc(n.x, n.y, 28, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(n.x, n.y, RADIUS_CIRCLE, 0, Math.PI * 2);
     }
     ctx.fill(); ctx.stroke();
     ctx.setLineDash([]);
