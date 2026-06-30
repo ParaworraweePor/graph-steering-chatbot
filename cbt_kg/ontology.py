@@ -335,9 +335,15 @@ ANCHOR_FAMILIES: dict[str, list[tuple[str, str, str]]] = {
          "the reaction that followed this thought (add reportedIntensity ONLY if the "
          "client states a strength like \"very anxious\"/\"8/10\")"),
         ("stemsFrom", "CoreBelief",
-         "this thought reflects/derives from that core belief (downward-arrow / ladder)"),
+         "this thought reflects/derives from that core belief (downward-arrow / ladder) — "
+         "evaluate INDEPENDENTLY per thought; thoughts from the same Situation can stem from different CoreBeliefs"),
+        ("stemsFrom", "IntermediateBelief",
+         "use when the thought's content is driven by the rule/demand itself "
+         "(\"I might slip up and break my rule\") rather than an identity claim "
+         "(\"I am worthless\") — the rule-strength is the proximate driver"),
         ("associatedWith", "Problem",
-         "FALLBACK: the problem this thought is tied to — use when no Situation routes it"),
+         "FALLBACK ONLY: use when no Situation can be identified to route this thought — "
+         "attempt the full Situation→AutomaticThought chain first"),
         ("hasAdaptiveResponse", "AdaptiveResponse",
          "the balanced response that answers this thought"),
     ],
@@ -379,6 +385,8 @@ ANCHOR_FAMILIES: dict[str, list[tuple[str, str, str]]] = {
 }
 
 REINFORCES = ("reinforces", "Reaction", "CoreBelief")
+# Stage-3 wide-window LLM pass only. Never extracted per-turn (Tier A).
+# Absence of a reinforces edge is clinically informative; do not fabricate.
 
 ALLOWED_SIGNATURES: frozenset[tuple[str, str, str]] = frozenset(
     [(p, subj, o) for subj, fams in ANCHOR_FAMILIES.items() for (p, o, _h) in fams]

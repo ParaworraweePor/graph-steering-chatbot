@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from cbt_kg.ontology import (ANCHOR_FAMILIES, CBTSchema, CLASS_DEFINITIONS,
-                              CONTENT_LABELS, CORE_BELIEF_DOMAINS, DISTORTION_TYPES,
-                              EDGE_MAP, EXTRACT_CLASSES, HOMEWORK_TASKTYPES,
-                              IB_SUBTYPES, NODE_CLASSES, PREDICATE_FROM_REL,
-                              PROBLEM_DOMAINS, REACTION_CHANNELS, REL_TYPE,
-                              SELF_CB_CATEGORIES, SITUATION_KINDS, SUBJECT_EDGES,
-                              TECHNIQUES, TEXT_PROP, apply_gating_constraints)
+from cbt_kg.ontology import (ALLOWED_SIGNATURES, ANCHOR_FAMILIES, CBTSchema,
+                              CLASS_DEFINITIONS, CONTENT_LABELS, CORE_BELIEF_DOMAINS,
+                              DISJOINT_RULES, DISTORTION_TYPES, EDGE_MAP, EXTRACT_CLASSES,
+                              HOMEWORK_TASKTYPES, IB_SUBTYPES, NODE_CLASSES,
+                              PREDICATE_FROM_REL, PROBLEM_DOMAINS, REACTION_CHANNELS,
+                              REL_TYPE, SELF_CB_CATEGORIES, SITUATION_KINDS,
+                              SUBJECT_EDGES, TECHNIQUES, TEXT_PROP,
+                              apply_gating_constraints)
 
 
 def test_thirteen_node_classes():
@@ -141,6 +142,21 @@ def test_gating_constraints_defaults():
     # explicit isOptional preserved
     p = apply_gating_constraints("Homework", {"taskDescription": "y", "isOptional": True})
     assert p["isOptional"] is True
+
+
+def test_stems_from_allows_both_cb_and_ib():
+    """v7.2 §2.3 — AT→stemsFrom→IntermediateBelief must be a valid signature."""
+    at_families = {(pred, obj) for pred, obj, _h in ANCHOR_FAMILIES["AutomaticThought"]}
+    assert ("stemsFrom", "CoreBelief") in at_families
+    assert ("stemsFrom", "IntermediateBelief") in at_families
+    assert ("stemsFrom", "AutomaticThought", "CoreBelief") in ALLOWED_SIGNATURES
+    assert ("stemsFrom", "AutomaticThought", "IntermediateBelief") in ALLOWED_SIGNATURES
+
+
+def test_corebef_influences_perception_absent_and_disjointed():
+    """v7.2 §1 — CoreBelief→influencesPerceptionOf→Situation must not be a valid edge."""
+    assert ("influencesPerceptionOf", "CoreBelief", "Situation") not in ALLOWED_SIGNATURES
+    assert ("CoreBelief", "influencesPerceptionOf", "Situation") in DISJOINT_RULES
 
 
 def test_schema_protocol_methods():

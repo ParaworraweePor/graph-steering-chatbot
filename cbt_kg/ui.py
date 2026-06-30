@@ -107,10 +107,8 @@ def _build_canvas_data(
     for e in graph_edges:
         if e.subject_id not in node_ids or e.object_id not in node_ids:
             continue
-        # Skip edges where both endpoints are missing (startup noise)
-        if (node_status.get(e.subject_id) == "missing" and
-                node_status.get(e.object_id) == "missing"):
-            continue
+        if e.status != "found":
+            continue                  # suppress placeholder edges (§UI-1.1 §2.2)
         canvas_edges.append({
             "id": e.edge_id,
             "from": e.subject_id,
@@ -231,7 +229,7 @@ canvas { position: absolute; top: 0; left: 0; cursor: pointer; }
         <div style="width:100%;height:0;"></div>
         <div class="leg"><div class="ld" style="background:#D1D5DB;border:1px solid #9CA3AF;"></div>Utterance</div>
         <div class="leg"><div style="width:16px;height:1.5px;background:#1D9E75;"></div>Found</div>
-        <div class="leg"><div style="width:16px;height:1.5px;background:repeating-linear-gradient(90deg,#bbb 0,#bbb 3px,transparent 3px,transparent 6px);"></div>Placeholder</div>
+        <div class="leg" id="legPlaceholderEdge"><div style="width:16px;height:1.5px;background:repeating-linear-gradient(90deg,#bbb 0,#bbb 3px,transparent 3px,transparent 6px);"></div>Placeholder</div>
       </div>
     </div>
     <div class="detail-panel" id="dp">
@@ -262,7 +260,7 @@ const PREDICATES = __PREDICATES__;
 let nodes = __NODES__;
 let edges = __EDGES__;
 
-// ── Layout ──────────────────────────────────────────────────────────────
+// ── Layout constants ──────────────────────────────────────────────────────
 const LAYERS = {
   Client: 0, Session: 1,
   Problem: 2, Goal: 2,
@@ -277,23 +275,27 @@ const RADIUS_RECT_H = 22;
 const RADIUS_RECT_W = 38;
 const ARROW_CLEARANCE = 8;
 const CURVE = 28;
+const MAX_PER_ROW = 6;
+const SUBROW_GAP = 64;
+const MIN_SEP = 68;
 
 function applyLayout(W, H) {
   const MARGIN = 48;
   const RIGHT_W = 160;
-  const MAIN_W = W - RIGHT_W - MARGIN * 2;
 
-  // Bucket nodes into layer groups and right-side groups
-  const layerGroups = {};
-  const rightGroups = {};
+  // Virtual canvas scales with node count so dense graphs breathe
+  const SCALE = Math.max(1, Math.sqrt(nodes.length / 18));
+  const VW = W * SCALE, VH = H * SCALE;
+  const vM = MARGIN * SCALE;
+  const vMAIN_W = VW - RIGHT_W * SCALE - vM * 2;
+
+  const layerGroups = {}, rightGroups = {};
   for (const n of nodes) {
     if (RIGHT_SIDE.has(n.label)) {
-      if (!rightGroups[n.label]) rightGroups[n.label] = [];
-      rightGroups[n.label].push(n);
+      (rightGroups[n.label] = rightGroups[n.label] || []).push(n);
     } else {
       const l = LAYERS[n.label] !== undefined ? LAYERS[n.label] : 6;
-      if (!layerGroups[l]) layerGroups[l] = [];
-      layerGroups[l].push(n);
+      (layerGroups[l] = layerGroups[l] || []).push(n);
     }
   }
 
@@ -301,56 +303,54 @@ function applyLayout(W, H) {
   const totalLayers = mainLayers.length;
   const nodeBaseY = {};
 
-  // Step 1 — hierarchical slot assignment
+  // Hierarchical slot assignment — dense layers wrap into sub-rows
   mainLayers.forEach(function(l, layerIndex) {
     const row = layerGroups[l];
-    const count = row.length;
-    const slotW = MAIN_W / count;
-    const layerH = totalLayers > 1 ? (H - MARGIN * 2) / (totalLayers - 1) : H / 2;
-    const yPos = MARGIN + layerIndex * layerH;
-    row.forEach(function(n, i) {
-      n.x = MARGIN + slotW * i + slotW / 2;
-      n.y = yPos;
-      nodeBaseY[n.id] = yPos;
-    });
+    const subRows = Math.ceil(row.length / MAX_PER_ROW);
+    const layerH = totalLayers > 1 ? (VH - vM * 2) / (totalLayers - 1) : VH / 2;
+    const yBase = vM + layerIndex * layerH;
+    for (let i = 0; i < row.length; i++) {
+      const sr = Math.floor(i / MAX_PER_ROW);
+      const idxInSr = i % MAX_PER_ROW;
+      const cntInSr = Math.min(MAX_PER_ROW, row.length - sr * MAX_PER_ROW);
+      const slotW = vMAIN_W / cntInSr;
+      row[i].x = vM + slotW * idxInSr + slotW / 2;
+      row[i].y = yBase + (sr - (subRows - 1) / 2) * SUBROW_GAP * SCALE;
+      nodeBaseY[row[i].id] = row[i].y;
+    }
   });
 
-  // RIGHT_SIDE: group by label, distribute vertically
-  const rightLabelOrder = Object.keys(rightGroups);
-  const rightLabelCount = rightLabelOrder.length;
-  rightLabelOrder.forEach(function(label, labelIdx) {
+  // Right-side nodes (Intervention, Homework)
+  const rightLabels = Object.keys(rightGroups);
+  rightLabels.forEach(function(label, li) {
     const group = rightGroups[label];
-    const groupSlotH = rightLabelCount > 0 ? (H - MARGIN * 2) / rightLabelCount : H - MARGIN * 2;
-    const slotStart = MARGIN + labelIdx * groupSlotH;
-    const itemH = group.length > 1 ? groupSlotH / group.length : groupSlotH;
+    const slotH = rightLabels.length > 0 ? (VH - vM * 2) / rightLabels.length : VH - vM * 2;
+    const slotStart = vM + li * slotH;
+    const itemH = group.length > 1 ? slotH / group.length : slotH;
     group.forEach(function(n, i) {
-      n.x = W - RIGHT_W / 2;
+      n.x = VW - RIGHT_W * SCALE / 2;
       n.y = slotStart + itemH * i + itemH / 2;
     });
   });
 
-  // Step 2 — spring-force refinement (80 iterations, annealed)
+  // Spring-force refinement (80 iterations, annealed) — stronger repulsion
   for (let iter = 0; iter < 80; iter++) {
     const step = 0.4 * Math.pow(0.97, iter);
     const force = {};
     for (const n of nodes) force[n.id] = {x: 0, y: 0};
 
-    // Repulsion (all pairs)
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
         const dx = b.x - a.x, dy = b.y - a.y;
         const dist = Math.max(Math.hypot(dx, dy), 1);
-        const rep = Math.min(8000 / (dist * dist), 60);
+        const rep = Math.min(12000 / (dist * dist), 90);
         const ux = dx / dist, uy = dy / dist;
-        force[a.id].x -= ux * rep;
-        force[a.id].y -= uy * rep * 0.15;
-        force[b.id].x += ux * rep;
-        force[b.id].y += uy * rep * 0.15;
+        force[a.id].x -= ux * rep; force[a.id].y -= uy * rep * 0.15;
+        force[b.id].x += ux * rep; force[b.id].y += uy * rep * 0.15;
       }
     }
 
-    // Attraction along edges
     const nodeMap = {};
     for (const n of nodes) nodeMap[n.id] = n;
     for (const e of edges) {
@@ -360,32 +360,67 @@ function applyLayout(W, H) {
       const dist = Math.max(Math.hypot(dx, dy), 1);
       const att = (dist - 130) * 0.03;
       const ux = dx / dist, uy = dy / dist;
-      force[a.id].x += ux * att;
-      force[a.id].y += uy * att;
-      force[b.id].x -= ux * att;
-      force[b.id].y -= uy * att;
+      force[a.id].x += ux * att; force[a.id].y += uy * att;
+      force[b.id].x -= ux * att; force[b.id].y -= uy * att;
     }
 
-    // Apply forces with layer-aware boundary clamping
     for (const n of nodes) {
       if (RIGHT_SIDE.has(n.label)) {
-        n.x = Math.max(W - RIGHT_W - 10, Math.min(W - 30, n.x + force[n.id].x * step));
-        n.y = Math.max(30, Math.min(H - 30, n.y + force[n.id].y * step));
+        n.x = Math.max(VW - RIGHT_W * SCALE - 10, Math.min(VW - 30, n.x + force[n.id].x * step));
+        n.y = Math.max(30, Math.min(VH - 30, n.y + force[n.id].y * step));
       } else {
-        const yBase = nodeBaseY[n.id] !== undefined ? nodeBaseY[n.id] : H / 2;
-        n.x = Math.max(MARGIN + 20, Math.min(MARGIN + MAIN_W - 20, n.x + force[n.id].x * step));
-        n.y = Math.max(yBase - 25, Math.min(yBase + 25, n.y + force[n.id].y * step));
+        const yBase = nodeBaseY[n.id] !== undefined ? nodeBaseY[n.id] : VH / 2;
+        n.x = Math.max(vM + 20, Math.min(vM + vMAIN_W - 20, n.x + force[n.id].x * step));
+        n.y = Math.max(yBase - 25 * SCALE, Math.min(yBase + 25 * SCALE, n.y + force[n.id].y * step));
+      }
+    }
+  }
+
+  // MIN_SEP hard-separation relaxation pass
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < MIN_SEP) {
+        const push = (MIN_SEP - d) / 2, ux = dx / d, uy = dy / d;
+        a.x -= ux * push; a.y -= uy * push * 0.5;
+        b.x += ux * push; b.y += uy * push * 0.5;
       }
     }
   }
 }
 
-// ── Canvas setup ─────────────────────────────────────────────────────────
+// ── Canvas setup ──────────────────────────────────────────────────────────
 const gp = document.getElementById('gp');
 const cv = document.getElementById('gc');
 const ctx = cv.getContext('2d');
 let dpr = window.devicePixelRatio || 1;
 let lastNodeCount = 0;
+let W = 1, H = 1;
+
+// ── Viewport state ────────────────────────────────────────────────────────
+let view = { scale: 1, tx: 0, ty: 0 };
+let panning = null;
+
+function toWorld(sx, sy) {
+  return { x: (sx - view.tx) / view.scale, y: (sy - view.ty) / view.scale };
+}
+
+function zoomToFit(pad) {
+  pad = pad !== undefined ? pad : 40;
+  if (!nodes.length) return;
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for (const n of nodes) {
+    minX=Math.min(minX,n.x); minY=Math.min(minY,n.y);
+    maxX=Math.max(maxX,n.x); maxY=Math.max(maxY,n.y);
+  }
+  const gw=(maxX-minX)||1, gh=(maxY-minY)||1;
+  view.scale = Math.max(0.2, Math.min(3, Math.min((W-pad*2)/gw, (H-pad*2)/gh)));
+  view.tx = (W - gw*view.scale)/2 - minX*view.scale;
+  view.ty = (H - gh*view.scale)/2 - minY*view.scale;
+  draw();
+}
 
 function resize() {
   const rect = gp.getBoundingClientRect();
@@ -393,30 +428,54 @@ function resize() {
   const legendH = legendEl ? legendEl.offsetHeight : 0;
   const w = Math.max(rect.width, 10);
   const h = Math.max(rect.height - legendH, 10);
-  cv.style.width = w + 'px';
-  cv.style.height = h + 'px';
-  cv.style.top = '0px';
-  cv.width = w * dpr;
-  cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px'; cv.style.top = '0px';
+  cv.width = w * dpr; cv.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  W = w; H = h;
   if (nodes.length > 0 && w > 50 && h > 50 && nodes.length !== lastNodeCount) {
     applyLayout(w, h);
     lastNodeCount = nodes.length;
+    zoomToFit();
+  } else {
+    draw();
   }
-  draw();
 }
 
-// ── Edit-mode toolbar ─────────────────────────────────────────────────────
+// ── Toolbar (zoom controls always; edit controls only in EDIT_MODE) ────────
 const gActions = document.getElementById('gActions');
-if (EDIT_MODE) {
-  gActions.innerHTML =
+gActions.innerHTML =
+  '<button class="btn-sm" id="btnFit">Fit</button>' +
+  '<button class="btn-sm" id="btnZoomIn">＋</button>' +
+  '<button class="btn-sm" id="btnZoomOut">－</button>' +
+  '<button class="btn-sm" id="btnReset">Reset</button>' +
+  (EDIT_MODE ?
     '<button class="btn-sm" id="btnNode">+ Node</button>' +
     '<button class="btn-sm" id="btnEdge">+ Edge</button>' +
-    '<button class="btn-sm primary" id="btnSave">Save JSON</button>';
+    '<button class="btn-sm primary" id="btnSave">Save JSON</button>' : '');
+
+document.getElementById('btnFit').addEventListener('click', function() { zoomToFit(); });
+document.getElementById('btnZoomIn').addEventListener('click', function() {
+  const before = toWorld(W/2, H/2);
+  view.scale = Math.min(3, view.scale * 1.2);
+  view.tx = W/2 - before.x * view.scale; view.ty = H/2 - before.y * view.scale; draw();
+});
+document.getElementById('btnZoomOut').addEventListener('click', function() {
+  const before = toWorld(W/2, H/2);
+  view.scale = Math.max(0.2, view.scale / 1.2);
+  view.tx = W/2 - before.x * view.scale; view.ty = H/2 - before.y * view.scale; draw();
+});
+document.getElementById('btnReset').addEventListener('click', function() {
+  if (nodes.length > 0) { applyLayout(W, H); zoomToFit(); } else { draw(); }
+});
+if (EDIT_MODE) {
   document.getElementById('btnNode').addEventListener('click', showCreateNode);
   document.getElementById('btnEdge').addEventListener('click', startEdgeMode);
   document.getElementById('btnSave').addEventListener('click', saveJSON);
 }
+
+// Hide placeholder-edge legend entry in read-only mode
+const legPE = document.getElementById('legPlaceholderEdge');
+if (legPE && !EDIT_MODE) legPE.style.display = 'none';
 
 // ── State ─────────────────────────────────────────────────────────────────
 let selected = null;
@@ -434,35 +493,35 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-function nodeAt(x, y) {
+function nodeAt(wx, wy) {
   for (const n of nodes) {
     if (RECT_LABELS.has(n.label)) {
-      if (x >= n.x-RADIUS_RECT_W && x <= n.x+RADIUS_RECT_W && y >= n.y-RADIUS_RECT_H && y <= n.y+RADIUS_RECT_H) return n;
+      if (wx>=n.x-RADIUS_RECT_W && wx<=n.x+RADIUS_RECT_W && wy>=n.y-RADIUS_RECT_H && wy<=n.y+RADIUS_RECT_H) return n;
     }
   }
   for (const n of nodes) {
-    if (!RECT_LABELS.has(n.label)) {
-      if (Math.hypot(n.x - x, n.y - y) < RADIUS_CIRCLE) return n;
-    }
+    if (!RECT_LABELS.has(n.label) && Math.hypot(n.x-wx, n.y-wy) < RADIUS_CIRCLE) return n;
   }
   return null;
 }
 
-function edgeAt(x, y) {
+function edgeAt(wx, wy) {
   const nmap = {};
   for (const n of nodes) nmap[n.id] = n;
   for (const e of edges) {
     const a = nmap[e.from], b = nmap[e.to];
     if (!a || !b) continue;
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    if (Math.hypot(mx - x, my - y) < 16) return e;
+    if (Math.hypot((a.x+b.x)/2 - wx, (a.y+b.y)/2 - wy) < 16) return e;
   }
   return null;
 }
 
 function draw() {
-  const W = cv.width / dpr, H = cv.height / dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  ctx.translate(view.tx, view.ty);
+  ctx.scale(view.scale, view.scale);
+
   const nmap = {};
   for (const n of nodes) nmap[n.id] = n;
 
@@ -474,368 +533,282 @@ function draw() {
     const isFound = e.status === 'found';
     const col = sel ? '#D85A30' : (isFound ? '#1D9E75' : '#bbb');
     ctx.save();
-    ctx.strokeStyle = col;
-    ctx.lineWidth = sel ? 2.2 : 1.4;
+    ctx.strokeStyle = col; ctx.lineWidth = sel ? 2.2 : 1.4;
     if (!isFound) ctx.setLineDash([5, 3]);
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.max(Math.hypot(dx, dy), 1);
-    const ux = dx / dist, uy = dy / dist;
+    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.max(Math.hypot(dx,dy),1);
+    const ux=dx/dist, uy=dy/dist;
     const startR = RECT_LABELS.has(a.label) ? RADIUS_RECT_H : RADIUS_CIRCLE;
     const endR   = RECT_LABELS.has(b.label) ? RADIUS_RECT_H : RADIUS_CIRCLE;
-    const sx = a.x + ux * startR, sy = a.y + uy * startR;
-    const ex = b.x - ux * (endR + ARROW_CLEARANCE), ey = b.y - uy * (endR + ARROW_CLEARANCE);
-    // Bezier control points (lateral offset perpendicular to edge)
-    const cx1 = sx + uy * CURVE, cy1 = sy - ux * CURVE;
-    const cx2 = ex + uy * CURVE, cy2 = ey - ux * CURVE;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, ex, ey);
-    ctx.stroke();
+    const sx=a.x+ux*startR, sy=a.y+uy*startR;
+    const ex=b.x-ux*(endR+ARROW_CLEARANCE), ey=b.y-uy*(endR+ARROW_CLEARANCE);
+    const cx1=sx+uy*CURVE, cy1=sy-ux*CURVE, cx2=ex+uy*CURVE, cy2=ey-ux*CURVE;
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.bezierCurveTo(cx1,cy1,cx2,cy2,ex,ey); ctx.stroke();
     ctx.setLineDash([]);
-    // Arrow head using final bezier tangent
-    const ang = Math.atan2(ey - cy2, ex - cx2);
+    const ang = Math.atan2(ey-cy2, ex-cx2);
     ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - 9 * Math.cos(ang - 0.4), ey - 9 * Math.sin(ang - 0.4));
-    ctx.lineTo(ex - 9 * Math.cos(ang + 0.4), ey - 9 * Math.sin(ang + 0.4));
+    ctx.beginPath(); ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-9*Math.cos(ang-0.4), ey-9*Math.sin(ang-0.4));
+    ctx.lineTo(ex-9*Math.cos(ang+0.4), ey-9*Math.sin(ang+0.4));
     ctx.closePath(); ctx.fill();
-    // Edge label at bezier midpoint offset laterally
-    const mx = (sx + ex) / 2 + uy * CURVE * 0.5;
-    const my = (sy + ey) / 2 - ux * CURVE * 0.5;
-    ctx.font = '9px system-ui,sans-serif';
+    const mx=(sx+ex)/2+uy*CURVE*0.5, my=(sy+ey)/2-ux*CURVE*0.5;
+    ctx.font='9px system-ui,sans-serif';
     ctx.fillStyle = sel ? '#D85A30' : (isFound ? '#0F6E56' : '#aaa');
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(e.predicate, mx, my - 7);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(e.predicate, mx, my-7);
     ctx.restore();
   }
 
   // Draw nodes
   for (const n of nodes) {
-    const sel = selected && selected.type === 'node' && selected.id === n.id;
+    const sel   = selected && selected.type === 'node' && selected.id === n.id;
     const efrom = edgeMode && edgeFrom === n.id;
     ctx.save();
     const isMissing = n.status === 'missing';
-    const col = isMissing ? COLOR['missing'] : (COLOR[n.label] || '#aaa');
-    const bgCol = isMissing ? '#F5F5F5' : (BADGE_BG[n.label] || '#eee');
+    const col    = isMissing ? COLOR['missing'] : (COLOR[n.label] || '#aaa');
+    const bgCol  = isMissing ? '#F5F5F5' : (BADGE_BG[n.label] || '#eee');
     const isRect = RECT_LABELS.has(n.label);
+    // §UI-1.1 §2.1: use BADGE_COLOR for both text lines, not stroke colour
+    const nodeTextCol = isMissing ? '#9aa0a6' : (BADGE_COLOR[n.label] || '#1F2937');
 
-    if (sel || efrom) {
-      ctx.shadowColor = efrom ? '#378ADD' : '#D85A30';
-      ctx.shadowBlur = 10;
-    }
-
-    ctx.fillStyle = bgCol;
-    ctx.strokeStyle = sel ? '#D85A30' : col;
-    ctx.lineWidth = sel ? 2.2 : 1.5;
+    if (sel || efrom) { ctx.shadowColor = efrom ? '#378ADD' : '#D85A30'; ctx.shadowBlur = 10; }
+    ctx.fillStyle = bgCol; ctx.strokeStyle = sel ? '#D85A30' : col; ctx.lineWidth = sel ? 2.2 : 1.5;
     if (isMissing) ctx.setLineDash([4, 3]);
+    if (isRect) { roundRect(ctx, n.x-RADIUS_RECT_W, n.y-RADIUS_RECT_H, RADIUS_RECT_W*2, RADIUS_RECT_H*2, 6); }
+    else { ctx.beginPath(); ctx.arc(n.x, n.y, RADIUS_CIRCLE, 0, Math.PI*2); }
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]); ctx.shadowBlur = 0;
 
-    if (isRect) {
-      roundRect(ctx, n.x - RADIUS_RECT_W, n.y - RADIUS_RECT_H, RADIUS_RECT_W * 2, RADIUS_RECT_H * 2, 6);
-    } else {
-      ctx.beginPath(); ctx.arc(n.x, n.y, RADIUS_CIRCLE, 0, Math.PI * 2);
-    }
-    ctx.fill(); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.shadowBlur = 0;
-
-    // Label text
-    const textCol = isMissing ? '#aaa' : (BADGE_COLOR[n.label] || '#333');
-    ctx.fillStyle = textCol;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '9px system-ui,sans-serif';
-    const shortLabel = n.label.length > 13 ? n.label.slice(0, 11) + '…' : n.label;
-    ctx.fillText(shortLabel, n.x, n.y - 7);
-    // Main prop snippet
-    const rawProp = Object.values(n.props || {})[0];
+    // Class label — bold
+    ctx.fillStyle = nodeTextCol; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '600 9px system-ui,sans-serif';
+    ctx.fillText(n.label.length > 13 ? n.label.slice(0,11)+'…' : n.label, n.x, n.y-7);
+    // Property preview — same colour at 82% alpha
+    const rawProp = Object.values(n.props||{})[0];
     const mainProp = rawProp !== undefined && rawProp !== null ? String(rawProp) : (isMissing ? 'missing' : '');
-    const shortProp = mainProp.slice(0, 13) + (mainProp.length > 13 ? '…' : '');
-    ctx.font = '8px system-ui,sans-serif';
-    ctx.fillStyle = isMissing ? '#ccc' : col;
-    ctx.fillText(shortProp, n.x, n.y + 6);
+    ctx.save();
+    ctx.globalAlpha = isMissing ? 1 : 0.82;
+    ctx.fillStyle = nodeTextCol; ctx.font = '8px system-ui,sans-serif';
+    ctx.fillText(mainProp.slice(0,13)+(mainProp.length>13?'…':''), n.x, n.y+6);
+    ctx.restore();
 
     ctx.restore();
   }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);  // reset transform after drawing
 }
 
-// ── Interaction ───────────────────────────────────────────────────────────
+// ── Mouse interaction ─────────────────────────────────────────────────────
 cv.addEventListener('mousedown', function(e) {
   const r = cv.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
-  const n = nodeAt(mx, my);
+  const w = toWorld(e.clientX - r.left, e.clientY - r.top);
+  const n = nodeAt(w.x, w.y);
   if (edgeMode) {
     if (n) {
       if (!edgeFrom) { edgeFrom = n.id; draw(); }
-      else if (edgeFrom !== n.id) {
-        showCreateEdge(edgeFrom, n.id);
-        edgeFrom = null; edgeMode = false;
-      }
+      else if (edgeFrom !== n.id) { showCreateEdge(edgeFrom, n.id); edgeFrom = null; edgeMode = false; }
     }
     return;
   }
-  if (n) { drag = n; dragOff = {x: mx - n.x, y: my - n.y}; selectItem('node', n.id); return; }
-  const ed = edgeAt(mx, my);
+  if (n) { drag = n; dragOff = {x: w.x-n.x, y: w.y-n.y}; selectItem('node', n.id); return; }
+  const ed = edgeAt(w.x, w.y);
   if (ed) { selectItem('edge', ed.id); return; }
+  panning = { sx: e.clientX, sy: e.clientY, tx0: view.tx, ty0: view.ty };
   clearSelection();
 });
 cv.addEventListener('mousemove', function(e) {
-  if (!drag) return;
   const r = cv.getBoundingClientRect();
-  drag.x = e.clientX - r.left - dragOff.x;
-  drag.y = e.clientY - r.top - dragOff.y;
-  draw();
+  if (drag) {
+    const w = toWorld(e.clientX - r.left, e.clientY - r.top);
+    drag.x = w.x - dragOff.x; drag.y = w.y - dragOff.y; draw(); return;
+  }
+  if (panning) {
+    view.tx = panning.tx0 + (e.clientX - panning.sx);
+    view.ty = panning.ty0 + (e.clientY - panning.sy);
+    draw();
+  }
 });
-cv.addEventListener('mouseup', function() { drag = null; });
+cv.addEventListener('mouseup', function() { drag = null; panning = null; });
+cv.addEventListener('wheel', function(e) {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const before = toWorld(mx, my);
+  view.scale = Math.max(0.2, Math.min(3, view.scale * (e.deltaY < 0 ? 1.1 : 1/1.1)));
+  view.tx = mx - before.x * view.scale; view.ty = my - before.y * view.scale;
+  draw();
+}, { passive: false });
 
 function selectItem(type, id) {
-  selected = {type, id};
-  draw();
+  selected = {type, id}; draw();
   if (type === 'node') showNodePanel(nodes.find(n => n.id === id));
   else showEdgePanel(edges.find(e => e.id === id));
 }
-
-function clearSelection() {
-  selected = null;
-  showEmpty();
-  draw();
-}
-
+function clearSelection() { selected = null; showEmpty(); draw(); }
 function showEmpty() {
   document.getElementById('dpEmpty').style.display = '';
-  const dc = document.getElementById('dpContent');
-  dc.style.display = 'none';
+  document.getElementById('dpContent').style.display = 'none';
 }
-
 function renderDP(body, actions) {
   document.getElementById('dpEmpty').style.display = 'none';
   const dc = document.getElementById('dpContent');
-  dc.style.display = 'flex';
-  dc.style.flexDirection = 'column';
+  dc.style.display = 'flex'; dc.style.flexDirection = 'column';
   document.getElementById('dpBody').innerHTML = body;
   const da = document.getElementById('dpActions');
-  if (actions && EDIT_MODE) {
-    da.style.display = 'flex';
-    da.innerHTML = actions;
-  } else {
-    da.style.display = 'none';
-    da.innerHTML = '';
-  }
+  if (actions && EDIT_MODE) { da.style.display = 'flex'; da.innerHTML = actions; }
+  else { da.style.display = 'none'; da.innerHTML = ''; }
 }
 
 function showNodePanel(n) {
   if (!n) return;
-  const bb = BADGE_BG[n.label] || '#eee';
-  const bc = BADGE_COLOR[n.label] || '#333';
-  const statusBg = n.status === 'found' ? '#E1F5EE' : '#f0f0f0';
-  const statusFg = n.status === 'found' ? '#0F6E56' : '#888';
-  const badge = '<span class="dp-label-badge" style="background:' + bb + ';color:' + bc + ';">' + n.label + '</span>';
-  const stag = '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:' + statusBg + ';color:' + statusFg + ';">' + n.status + '</span>';
-  let fields = '<div class="dp-field">' + badge + ' ' + stag + '</div>';
-
+  const bb = BADGE_BG[n.label]||'#eee', bc = BADGE_COLOR[n.label]||'#333';
+  const sBg = n.status==='found'?'#E1F5EE':'#f0f0f0', sFg = n.status==='found'?'#0F6E56':'#888';
+  const badge = '<span class="dp-label-badge" style="background:'+bb+';color:'+bc+';">'+n.label+'</span>';
+  const stag  = '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:'+sBg+';color:'+sFg+';">'+n.status+'</span>';
+  let fields = '<div class="dp-field">'+badge+' '+stag+'</div>';
   if (EDIT_MODE) {
-    fields += '<div class="dp-field"><label>Node ID</label><input id="dpId" value="' + esc(n.id) + '" /></div>';
-    fields += '<div class="dp-field"><label>Class</label><select id="dpClass">' +
-      NODE_CLASSES.map(function(c) { return '<option' + (c === n.label ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
-      '</select></div>';
-    fields += '<div class="dp-field"><label>Status</label><select id="dpStatus">' +
-      '<option' + (n.status === 'found' ? ' selected' : '') + '>found</option>' +
-      '<option' + (n.status === 'missing' ? ' selected' : '') + '>missing</option>' +
-      '</select></div>';
-    const propStr = Object.keys(n.props || {}).length > 0 ? JSON.stringify(n.props, null, 1) : '';
-    fields += '<div class="dp-field"><label>Properties (JSON)</label>' +
-      '<textarea id="dpProps" placeholder="{&quot;content&quot;:&quot;...&quot;}">' + esc(propStr) + '</textarea></div>';
+    fields += '<div class="dp-field"><label>Node ID</label><input id="dpId" value="'+esc(n.id)+'" /></div>';
+    fields += '<div class="dp-field"><label>Class</label><select id="dpClass">'+
+      NODE_CLASSES.map(function(c){return '<option'+(c===n.label?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>';
+    fields += '<div class="dp-field"><label>Status</label><select id="dpStatus">'+
+      '<option'+(n.status==='found'?' selected':'')+'>found</option>'+
+      '<option'+(n.status==='missing'?' selected':'')+'>missing</option></select></div>';
+    const propStr = Object.keys(n.props||{}).length>0 ? JSON.stringify(n.props,null,1) : '';
+    fields += '<div class="dp-field"><label>Properties (JSON)</label>'+
+      '<textarea id="dpProps" placeholder="{&quot;content&quot;:&quot;...&quot;}">'+esc(propStr)+'</textarea></div>';
   } else {
-    // Read-only
-    fields += '<div class="dp-field"><label>Node ID</label><input value="' + esc(n.id) + '" readonly /></div>';
-    if (Object.keys(n.props || {}).length > 0) {
-      fields += '<div class="dp-field"><label>Properties</label>' +
-        '<textarea readonly>' + esc(JSON.stringify(n.props, null, 1)) + '</textarea></div>';
-    }
+    fields += '<div class="dp-field"><label>Node ID</label><input value="'+esc(n.id)+'" readonly /></div>';
+    if (Object.keys(n.props||{}).length>0)
+      fields += '<div class="dp-field"><label>Properties</label><textarea readonly>'+esc(JSON.stringify(n.props,null,1))+'</textarea></div>';
   }
-  const evidTurns = (n.evidence || []).join(', ') || '—';
-  fields += '<div class="dp-field"><label>Evidence turns</label><input value="' + esc(evidTurns) + '" readonly /></div>';
-
+  fields += '<div class="dp-field"><label>Evidence turns</label><input value="'+esc((n.evidence||[]).join(', ')||'—')+'" readonly /></div>';
   renderDP(fields,
-    '<button class="save" onclick="saveNode(&quot;' + esc(n.id) + '&quot;)">Save</button>' +
-    '<button class="del" onclick="deleteNode(&quot;' + esc(n.id) + '&quot;)">Delete</button>'
-  );
+    '<button class="save" onclick="saveNode(&quot;'+esc(n.id)+'&quot;)">Save</button>'+
+    '<button class="del" onclick="deleteNode(&quot;'+esc(n.id)+'&quot;)">Delete</button>');
 }
 
 function showEdgePanel(e) {
   if (!e) return;
-  const statusBg = e.status === 'found' ? '#E1F5EE' : '#f0f0f0';
-  const statusFg = e.status === 'found' ? '#0F6E56' : '#888';
-  const stag = '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:' + statusBg + ';color:' + statusFg + ';">' + e.status + '</span>';
-  let fields = '<div class="dp-field"><span style="font-size:11px;font-weight:500;color:#222;">Edge</span> ' + stag + '</div>';
-
+  const sBg = e.status==='found'?'#E1F5EE':'#f0f0f0', sFg = e.status==='found'?'#0F6E56':'#888';
+  const stag = '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:'+sBg+';color:'+sFg+';">'+e.status+'</span>';
+  let fields = '<div class="dp-field"><span style="font-size:11px;font-weight:500;color:#222;">Edge</span> '+stag+'</div>';
   if (EDIT_MODE) {
-    fields += '<div class="dp-field"><label>Predicate</label><select id="dpPred">' +
-      PREDICATES.map(function(p) { return '<option' + (p === e.predicate ? ' selected' : '') + '>' + p + '</option>'; }).join('') +
-      '</select></div>';
-    fields += '<div class="dp-field"><label>From</label><select id="dpFrom">' +
-      nodes.map(function(n) { return '<option value="' + n.id + '"' + (n.id === e.from ? ' selected' : '') + '>' + n.label + ' (' + n.id + ')</option>'; }).join('') +
-      '</select></div>';
-    fields += '<div class="dp-field"><label>To</label><select id="dpTo">' +
-      nodes.map(function(n) { return '<option value="' + n.id + '"' + (n.id === e.to ? ' selected' : '') + '>' + n.label + ' (' + n.id + ')</option>'; }).join('') +
-      '</select></div>';
-    fields += '<div class="dp-field"><label>Status</label><select id="dpEdgeStatus">' +
-      '<option' + (e.status === 'found' ? ' selected' : '') + '>found</option>' +
-      '<option' + (e.status === 'placeholder' ? ' selected' : '') + '>placeholder</option>' +
-      '</select></div>';
+    fields += '<div class="dp-field"><label>Predicate</label><select id="dpPred">'+
+      PREDICATES.map(function(p){return '<option'+(p===e.predicate?' selected':'')+'>'+p+'</option>';}).join('')+'</select></div>';
+    fields += '<div class="dp-field"><label>From</label><select id="dpFrom">'+
+      nodes.map(function(n){return '<option value="'+n.id+'"'+(n.id===e.from?' selected':'')+'>'+n.label+' ('+n.id+')</option>';}).join('')+'</select></div>';
+    fields += '<div class="dp-field"><label>To</label><select id="dpTo">'+
+      nodes.map(function(n){return '<option value="'+n.id+'"'+(n.id===e.to?' selected':'')+'>'+n.label+' ('+n.id+')</option>';}).join('')+'</select></div>';
+    fields += '<div class="dp-field"><label>Status</label><select id="dpEdgeStatus">'+
+      '<option'+(e.status==='found'?' selected':'')+'>found</option>'+
+      '<option'+(e.status==='placeholder'?' selected':'')+'>placeholder</option></select></div>';
   } else {
-    fields += '<div class="dp-field"><label>Predicate</label><input value="' + esc(e.predicate) + '" readonly /></div>';
-    fields += '<div class="dp-field"><label>From → To</label><input value="' + esc(e.from + ' → ' + e.to) + '" readonly /></div>';
+    fields += '<div class="dp-field"><label>Predicate</label><input value="'+esc(e.predicate)+'" readonly /></div>';
+    fields += '<div class="dp-field"><label>From → To</label><input value="'+esc(e.from+' → '+e.to)+'" readonly /></div>';
   }
-  const evid = (e.evidence || []).join(', ') || '—';
-  fields += '<div class="dp-field"><label>Evidence turns</label><input value="' + esc(evid) + '" readonly /></div>';
-
+  fields += '<div class="dp-field"><label>Evidence turns</label><input value="'+esc((e.evidence||[]).join(', ')||'—')+'" readonly /></div>';
   renderDP(fields,
-    '<button class="save" onclick="saveEdge(&quot;' + esc(e.id) + '&quot;)">Save</button>' +
-    '<button class="del" onclick="deleteEdge(&quot;' + esc(e.id) + '&quot;)">Delete</button>'
-  );
+    '<button class="save" onclick="saveEdge(&quot;'+esc(e.id)+'&quot;)">Save</button>'+
+    '<button class="del" onclick="deleteEdge(&quot;'+esc(e.id)+'&quot;)">Delete</button>');
 }
 
 function saveNode(id) {
-  const n = nodes.find(function(x) { return x.id === id; });
+  const n = nodes.find(function(x){return x.id===id;});
   if (!n) return;
   n.label = document.getElementById('dpClass').value;
   n.status = document.getElementById('dpStatus').value;
-  try { n.props = JSON.parse(document.getElementById('dpProps').value || '{}'); } catch(err) {}
+  try { n.props = JSON.parse(document.getElementById('dpProps').value||'{}'); } catch(err) {}
   draw(); showNodePanel(n);
 }
 function saveEdge(id) {
-  const e = edges.find(function(x) { return x.id === id; });
+  const e = edges.find(function(x){return x.id===id;});
   if (!e) return;
   e.predicate = document.getElementById('dpPred').value;
   e.from = document.getElementById('dpFrom').value;
-  e.to = document.getElementById('dpTo').value;
+  e.to   = document.getElementById('dpTo').value;
   e.status = document.getElementById('dpEdgeStatus').value;
   draw(); showEdgePanel(e);
 }
 function deleteNode(id) {
-  nodes = nodes.filter(function(n) { return n.id !== id; });
-  edges = edges.filter(function(e) { return e.from !== id && e.to !== id; });
+  nodes = nodes.filter(function(n){return n.id!==id;});
+  edges = edges.filter(function(e){return e.from!==id && e.to!==id;});
   clearSelection(); draw();
 }
 function deleteEdge(id) {
-  edges = edges.filter(function(e) { return e.id !== id; });
+  edges = edges.filter(function(e){return e.id!==id;});
   clearSelection(); draw();
 }
 
-// ── Edge creation ─────────────────────────────────────────────────────────
+// ── Edge creation modal ───────────────────────────────────────────────────
 let edgeModeTimeout = null;
 function startEdgeMode() {
   edgeMode = true; edgeFrom = null;
-  const t = document.getElementById('gTitle');
-  t.innerHTML = 'Click source node, then target node…';
+  document.getElementById('gTitle').innerHTML = 'Click source node, then target node…';
   if (edgeModeTimeout) clearTimeout(edgeModeTimeout);
-  edgeModeTimeout = setTimeout(function() {
-    edgeMode = false; edgeFrom = null;
-    updateTitle();
-  }, 10000);
+  edgeModeTimeout = setTimeout(function(){ edgeMode=false; edgeFrom=null; updateTitle(); }, 10000);
 }
-
 function showCreateEdge(fromId, toId) {
   if (edgeModeTimeout) clearTimeout(edgeModeTimeout);
   updateTitle();
-  const m = document.getElementById('createModal');
-  const b = document.getElementById('modalBox');
-  b.innerHTML =
-    '<div class="modal-title">Add edge</div>' +
-    '<div class="modal-field"><label>From</label><input value="' + esc(fromId) + '" readonly/></div>' +
-    '<div class="modal-field"><label>To</label><input value="' + esc(toId) + '" readonly/></div>' +
-    '<div class="modal-field"><label>Predicate</label><select id="mPred">' +
-    PREDICATES.map(function(p) { return '<option>' + p + '</option>'; }).join('') +
-    '</select></div>' +
-    '<div class="modal-actions">' +
-    '<button onclick="closeModal()">Cancel</button>' +
-    '<button class="confirm" onclick="confirmEdge(&quot;' + esc(fromId) + '&quot;,&quot;' + esc(toId) + '&quot;)">Add</button>' +
-    '</div>';
-  m.style.display = 'flex';
+  document.getElementById('modalBox').innerHTML =
+    '<div class="modal-title">Add edge</div>'+
+    '<div class="modal-field"><label>From</label><input value="'+esc(fromId)+'" readonly/></div>'+
+    '<div class="modal-field"><label>To</label><input value="'+esc(toId)+'" readonly/></div>'+
+    '<div class="modal-field"><label>Predicate</label><select id="mPred">'+
+    PREDICATES.map(function(p){return '<option>'+p+'</option>';}).join('')+'</select></div>'+
+    '<div class="modal-actions"><button onclick="closeModal()">Cancel</button>'+
+    '<button class="confirm" onclick="confirmEdge(&quot;'+esc(fromId)+'&quot;,&quot;'+esc(toId)+'&quot;)">Add</button></div>';
+  document.getElementById('createModal').style.display = 'flex';
 }
-
 function confirmEdge(from, to) {
-  const pred = document.getElementById('mPred').value;
-  const id = 'e' + Date.now();
-  edges.push({id: id, from: from, to: to, predicate: pred, status: 'found', evidence: [], props: {}});
+  edges.push({id:'e'+Date.now(), from:from, to:to, predicate:document.getElementById('mPred').value, status:'found', evidence:[], props:{}});
   closeModal(); updateTitle(); draw();
 }
 
-// ── Node creation ─────────────────────────────────────────────────────────
+// ── Node creation modal ───────────────────────────────────────────────────
 function showCreateNode() {
-  const m = document.getElementById('createModal');
-  const b = document.getElementById('modalBox');
-  b.innerHTML =
-    '<div class="modal-title">Add node</div>' +
-    '<div class="modal-field"><label>Class</label><select id="mClass">' +
-    NODE_CLASSES.map(function(c) { return '<option>' + c + '</option>'; }).join('') +
-    '</select></div>' +
-    '<div class="modal-field"><label>Main text / content</label>' +
-    '<textarea id="mText" placeholder="e.g. I will never succeed"></textarea></div>' +
-    '<div class="modal-actions">' +
-    '<button onclick="closeModal()">Cancel</button>' +
-    '<button class="confirm" onclick="confirmNode()">Add</button>' +
-    '</div>';
-  m.style.display = 'flex';
+  document.getElementById('modalBox').innerHTML =
+    '<div class="modal-title">Add node</div>'+
+    '<div class="modal-field"><label>Class</label><select id="mClass">'+
+    NODE_CLASSES.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'+
+    '<div class="modal-field"><label>Main text / content</label>'+
+    '<textarea id="mText" placeholder="e.g. I will never succeed"></textarea></div>'+
+    '<div class="modal-actions"><button onclick="closeModal()">Cancel</button>'+
+    '<button class="confirm" onclick="confirmNode()">Add</button></div>';
+  document.getElementById('createModal').style.display = 'flex';
 }
-
 function confirmNode() {
   const cls = document.getElementById('mClass').value;
   const txt = document.getElementById('mText').value;
-  const propKeys = {
-    Problem: 'description', Goal: 'statement', CoreBelief: 'content',
-    IntermediateBelief: 'content', Situation: 'description',
-    AutomaticThought: 'content', Reaction: 'content',
-    AdaptiveResponse: 'content', Intervention: 'description',
-    Homework: 'taskDescription', Client: '', Session: ''
-  };
-  const propKey = propKeys[cls] || 'content';
-  const id = cls.toLowerCase().slice(0, 3) + '_' + Date.now();
-  const W = cv.width / dpr, H = cv.height / dpr;
-  nodes.push({
-    id: id, label: cls,
-    x: 60 + Math.random() * (W - 120),
-    y: 60 + Math.random() * (H - 120),
-    status: 'found',
-    props: propKey ? {[propKey]: txt} : {},
-    evidence: []
-  });
+  const propKeys = {Problem:'description',Goal:'statement',CoreBelief:'content',
+    IntermediateBelief:'content',Situation:'description',AutomaticThought:'content',
+    Reaction:'content',AdaptiveResponse:'content',Intervention:'description',
+    Homework:'taskDescription',Client:'',Session:''};
+  const propKey = propKeys[cls]||'content';
+  nodes.push({id:cls.toLowerCase().slice(0,3)+'_'+Date.now(), label:cls,
+    x:60+Math.random()*(W-120), y:60+Math.random()*(H-120),
+    status:'found', props:propKey?{[propKey]:txt}:{}, evidence:[]});
   closeModal(); updateTitle(); draw();
 }
 
-// ── Save JSON ─────────────────────────────────────────────────────────────
 function saveJSON() {
-  const data = JSON.stringify({nodes: nodes, edges: edges}, null, 2);
-  const blob = new Blob([data], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'cbt_graph.json'; a.click();
+  const blob = new Blob([JSON.stringify({nodes:nodes,edges:edges},null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='cbt_graph.json'; a.click();
 }
-
-function closeModal() {
-  document.getElementById('createModal').style.display = 'none';
-}
-
+function closeModal() { document.getElementById('createModal').style.display='none'; }
 function updateTitle() {
-  const t = document.getElementById('gTitle');
-  t.innerHTML = '<span class="live-dot"></span>Knowledge graph · ' +
-    nodes.length + ' nodes · ' + edges.length + ' edges';
+  document.getElementById('gTitle').innerHTML =
+    '<span class="live-dot"></span>Knowledge graph · '+nodes.length+' nodes · '+edges.length+' edges';
 }
-
 function esc(s) {
-  if (s === undefined || s === null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  if (s===undefined||s===null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // ── Expose globals for inline onclick ─────────────────────────────────────
-window.saveNode = saveNode; window.saveEdge = saveEdge;
-window.deleteNode = deleteNode; window.deleteEdge = deleteEdge;
-window.confirmEdge = confirmEdge; window.confirmNode = confirmNode;
-window.closeModal = closeModal; window.clearSelection = clearSelection;
+window.saveNode=saveNode; window.saveEdge=saveEdge;
+window.deleteNode=deleteNode; window.deleteEdge=deleteEdge;
+window.confirmEdge=confirmEdge; window.confirmNode=confirmNode;
+window.closeModal=closeModal; window.clearSelection=clearSelection;
 
 new ResizeObserver(resize).observe(gp);
 resize();

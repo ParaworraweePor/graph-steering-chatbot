@@ -91,6 +91,13 @@ class InMemoryGraphStore:
             for node in self._found_nodes(label):
                 existing_text = _text_of(label, node.props)
                 if existing_text and cand_text and _jaccard(existing_text, cand_text) > 0.6:
+                    # Never merge CoreBeliefs with different categories — different
+                    # categories are different nodes by definition (v7.2 §2.1).
+                    if label == "CoreBelief":
+                        ec = node.props.get("category")
+                        cc = props.get("category")
+                        if ec and cc and ec != cc:
+                            continue
                     return self._merge_into_locked(node, props, turn_index)
             # Use a missing placeholder if available.
             for node in self._nodes.values():
@@ -290,11 +297,13 @@ def _cytoscape_render(nodes: Iterable[GraphNode], edges: Iterable[GraphEdge]) ->
         }})
     out_edges = []
     for e in edges:
+        if e.status != "found":
+            continue                  # suppress placeholder edges (§UI-1.1 §2.2)
         out_edges.append({"data": {
             "id": e.edge_id,
             "source": e.subject_id,
             "target": e.object_id,
-            "label": e.predicate if e.status == "found" else "",
+            "label": e.predicate,
             "predicate": e.predicate,
             "status": e.status,
         }})

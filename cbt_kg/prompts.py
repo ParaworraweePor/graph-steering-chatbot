@@ -28,6 +28,13 @@ GLOBAL RULES:
 5. Do NOT extract a therapist question as an AutomaticThought.
 6. Speaker prior — this turn's speaker is {speaker}. Typically extract: {prior}.
    (Goals and AdaptiveResponses may come from either speaker.)
+7. Speaker grounding — Reaction / AutomaticThought / CoreBelief / IntermediateBelief
+   must be grounded in the CLIENT's own words or explicit elaboration. Therapist
+   framing language alone is not sufficient even if the client gives a minimal "yeah";
+   the client must elaborate or clearly affirm in their own words.
+8. `associatedWith` is a FALLBACK edge — attempt the full Problem→Situation→
+   AutomaticThought chain first; only fall back to `associatedWith` when no Situation
+   can be identified for an AutomaticThought.
 
 The surrounding CONTEXT is for understanding only; entity text must be grounded in
 the TARGET TURN.
@@ -109,7 +116,10 @@ PROPERTY_TASKS = {
     "modality": "Label whether each automatic thought is a worded thought or a mental image.",
     "kind": "Identify the trigger CHANNEL of each situation (no time meaning).",
     "technique": "Identify which therapeutic technique each intervention uses. "
-                 "Beck techniques outside the list (psychoeducation, coping card) are 'other'.",
+                 "Beck techniques outside the CACTUS-12 list must be 'other' with a "
+                 "techniqueLabel (e.g. technique=other, techniqueLabel='laddering / downward arrow'; "
+                 "technique=other, techniqueLabel='psychoeducation'). "
+                 "Do not force-fit non-CACTUS-12 techniques into the nearest enum value.",
     "taskType": "Classify each homework task by type.",
     "category": "Categorize each self-directed core belief into Beck's three categories.",
     "domain_problem": "Identify the life domain of each Problem.",
@@ -136,8 +146,13 @@ extract either — Beck's basic cognitive model expects these canonical edges:
 
   - a Situation usually `triggers` at least one AutomaticThought
   - an AutomaticThought usually `leadsTo` at least one Reaction
-  - an AutomaticThought usually `stemsFrom` at least one CoreBelief (the ladder)
-  - a CoreBelief usually `givesRiseTo` at least one IntermediateBelief
+  - an AutomaticThought usually `stemsFrom` at least one CoreBelief OR IntermediateBelief
+    (evaluate independently per thought — thoughts from the same Situation may stem from
+    DIFFERENT CoreBeliefs; use IntermediateBelief as target when the thought is driven by
+    the rule/demand itself, not by an identity claim)
+  - a CoreBelief usually `givesRiseTo` at least one IntermediateBelief; fan-out to
+    multiple IntermediateBeliefs from a single CoreBelief is normal — do not cap
+  - `associatedWith` is a FALLBACK — use only when no Situation can be identified
   - a Problem usually `manifestsAs` at least one specific Situation
   - an Intervention is `appliedTo` whatever target it surfaced or examined
   - a Homework `targets` whatever it works on
@@ -199,6 +214,13 @@ EXTRACTION RULES:
 3. Therapist meta-commentary about CBT terminology is NOT a node — extract only
    what the client actually believes or experiences.
 4. Stay faithful: do not invent concepts not grounded in real evidence turns.
+5. Intellectual disavowal: if a client denies a CoreBelief shortly after it clearly
+   surfaced (e.g. "I don't think I'm worthless"), this is normal disavowal and does
+   NOT negate extraction — keep the node. Remove a CoreBelief only if the transcript
+   shows genuine, sustained revision of the belief, not a reflex denial.
+6. CoreBelief dedup: two CoreBeliefs with DIFFERENT `category` values (helpless /
+   unlovable / worthless) are DIFFERENT nodes even if their domain is both "self" or
+   their text is somewhat similar. Do not collapse them into one.
 
 Output JSON array, one object per {class_label}:
 [{{"label":"{class_label}","text":"<short>","evidence_turns":[<int>,...]}}]
