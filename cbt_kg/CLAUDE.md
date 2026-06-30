@@ -6,13 +6,22 @@ The runtime code lives in the `cbt_kg/` package at the repo root; this file
 sits inside it (`cbt_kg/CLAUDE.md`). All commands below are run from the repo
 root unless stated otherwise.
 
+## Setup
+
+```bash
+# From repo root — one-time venv creation
+python -m venv cbt_kg/chat-bot-env
+source cbt_kg/chat-bot-env/bin/activate
+pip install -r cbt_kg/requirements.txt
+cp cbt_kg/.env.example cbt_kg/.env
+```
+
+Activate the venv (`source cbt_kg/chat-bot-env/bin/activate`) before running
+any of the commands below.
+
 ## Commands
 
 ```bash
-pip install -r cbt_kg/requirements.txt
-cp cbt_kg/.env.example cbt_kg/.env    # defaults: local extractor + generator (qwen3.5-nothink via Ollama)
-ollama pull qwen3.5-nothink           # required for default extractor + generator
-
 uvicorn cbt_kg.api:app --reload       # Gradio UI at / · FastAPI routes below
 pytest                                # all tests; uses stub + echo (no Ollama / Neo4j needed)
 pytest cbt_kg/tests/test_therapy.py::test_async_turn_returns_expected_keys   # single test
@@ -21,6 +30,21 @@ pytest cbt_kg/tests/test_therapy.py::test_async_turn_returns_expected_keys   # s
 Offline (no Ollama): tests already default to `EXTRACTOR=stub GENERATOR=echo`
 (see `cbt_kg/conftest.py`). For manual runs, set those in `cbt_kg/.env` to
 bypass Ollama.
+
+### Ollama model
+
+The default model tag is `qwen3.5-nothink`. If it is not installed, either
+pull it (`ollama pull qwen3.5-nothink`) or point `.env` at any nothink variant
+you already have:
+
+```
+OLLAMA_MODEL=qwen3.5-27b-nothink:latest
+LOCAL_LLM_MODEL=qwen3.5-27b-nothink:latest
+```
+
+`OLLAMA_MODEL` drives the extractor (`TurnPipeline`); `LOCAL_LLM_MODEL` drives
+the generator (`LocalLLMGenerator`). Both default to `qwen3.5-nothink` and can
+be set independently.
 
 ## Environment variables (`cbt_kg/.env`)
 
@@ -164,6 +188,22 @@ implementations all emit the same canonical shape — `LiveGraphReader`
 V4_flat batch export). `QueryEngine.answer(question, nodes, edges)` does
 parse → execute → answer; execute is deterministic Python so the LLM cannot
 invent facts.
+
+### FastAPI routes (`api.py`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/chat` | Send a client turn; returns `reply`, `technique`, `phase`, `new_nodes`, `new_edges`, `graph_snapshot` |
+| `POST` | `/reset` | Wipe and reinitialise the session graph |
+| `GET` | `/graph/{session_id}` | Cytoscape.js JSON of the live graph |
+| `POST` | `/load_graph/live` | Load a live Part 1 session as a query source |
+| `POST` | `/load_graph/json` | Load a Stage 5 JSON export as a query source |
+| `POST` | `/load_graph/neo4j` | Connect a Neo4j database as a query source |
+| `POST` | `/query` | NL question against a loaded query graph |
+| `GET` | `/graph_preview/{handle}` | Cytoscape.js JSON of a loaded query graph |
+
+The Gradio UI is mounted at `/` **after** all routes are defined; `/docs`
+gives the full OpenAPI spec.
 
 ### Implementation notes worth knowing
 
